@@ -2,9 +2,10 @@ import { RepoRegistry, type RepoEntry } from './repo-registry.js';
 import { SpecStore } from './spec-store.js';
 import { StageMachine } from './stage-machine.js';
 import { EventBus } from './event-bus.js';
-import { PromptTemplates, type ResolvedTemplate } from '../prompts/templates.js';
+import { PromptTemplates, type ResolvedTemplate, type TemplateSummary } from '../prompts/templates.js';
 import { STAGE_IDS, type SpecFile, type StageId } from './schemas.js';
 import { logger } from './logger.js';
+import type { RepoBrief } from './repo-introspector.js';
 
 /**
  * The shared singleton. Both the MCP server and the dashboard talk ONLY to
@@ -74,6 +75,30 @@ export class AppCore {
       title: spec.title,
       upstreamArtifact: upstream,
     });
+  }
+
+  /** Gather repo signals and return a brief for the agent to draft curated templates. */
+  async proposeRepoTemplates(repoId: string): Promise<RepoBrief> {
+    const path = await this.repoPath(repoId);
+    return this.templates.generateCuratedTemplate(path, 'spec');
+  }
+
+  /** Persist a single draft template written by the agent. */
+  async writeRepoTemplate(repoId: string, stageId: StageId, content: string): Promise<void> {
+    const path = await this.repoPath(repoId);
+    await this.templates.writeRepoTemplate(path, stageId, content);
+  }
+
+  /** Mark a template as human-curated. */
+  async markTemplateCurated(repoId: string, stageId: StageId): Promise<void> {
+    const path = await this.repoPath(repoId);
+    await this.templates.markTemplateCurated(path, stageId);
+  }
+
+  /** List all 8 stage templates with their source status. */
+  async listTemplates(repoId: string): Promise<TemplateSummary[]> {
+    const path = await this.repoPath(repoId);
+    return this.templates.listTemplates(path);
   }
 
   /* ---- stage transitions (all go mutate -> persist -> emit) ---- */

@@ -113,6 +113,32 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
     }
   );
 
+  /* ---- templates (Phase 2) ---- */
+  fastify.get<{ Params: { repoId: string } }>(
+    '/api/repos/:repoId/templates',
+    async (req, reply) => {
+      try {
+        return await app.listTemplates(req.params.repoId);
+      } catch (e) {
+        return reply.code(404).send({ error: String((e as Error).message) });
+      }
+    }
+  );
+
+  fastify.post<{ Params: { repoId: string; stageId: string } }>(
+    '/api/repos/:repoId/templates/:stageId/curate',
+    async (req, reply) => {
+      const stage = StageIdSchema.safeParse(req.params.stageId);
+      if (!stage.success) return reply.code(400).send({ error: 'valid stageId required' });
+      try {
+        await app.markTemplateCurated(req.params.repoId, stage.data);
+        return { ok: true };
+      } catch (e) {
+        return reply.code(400).send({ error: String((e as Error).message) });
+      }
+    }
+  );
+
   /* ---- gates: the human actions ---- */
   fastify.post<{
     Params: { repoId: string; ticketId: string };

@@ -97,6 +97,42 @@ export function buildMcpServer(app: AppCore): McpServer {
   );
 
   server.registerTool(
+    'propose_repo_templates',
+    {
+      description:
+        'Gather repo signals (CLAUDE.md, build files, test framework, sample source file) ' +
+        'and return a generation brief. Use the brief to draft curated 8-stage templates ' +
+        'for this repo, then call write_repo_template for each stage.',
+      inputSchema: { repoId: z.string() },
+    },
+    async ({ repoId }) => {
+      try {
+        return ok(await app.proposeRepoTemplates(repoId));
+      } catch (e) {
+        return fail(String((e as Error).message));
+      }
+    }
+  );
+
+  server.registerTool(
+    'write_repo_template',
+    {
+      description:
+        'Persist a curated prompt template for one stage of a repo. ' +
+        'The template is stored as a draft until a human marks it curated in the dashboard.',
+      inputSchema: { repoId: z.string(), stageId: StageIdSchema, content: z.string() },
+    },
+    async ({ repoId, stageId, content }) => {
+      try {
+        await app.writeRepoTemplate(repoId, stageId, content);
+        return ok({ ok: true, repoId, stageId });
+      } catch (e) {
+        return fail(String((e as Error).message));
+      }
+    }
+  );
+
+  server.registerTool(
     'record_ai_output',
     {
       description:

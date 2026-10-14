@@ -51,6 +51,14 @@ export interface SpecFile {
   updatedAt: string;
 }
 
+export type TemplateSource = 'repo-curated' | 'repo-draft' | 'blueprint-default';
+
+export interface TemplateSummary {
+  stageId: StageId;
+  source: TemplateSource;
+  content: string;
+}
+
 export interface RepoEntry {
   id: string;
   path: string;

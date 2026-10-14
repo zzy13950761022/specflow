@@ -42,14 +42,14 @@ describe('PromptTemplates blueprint defaults', () => {
 });
 
 describe('PromptTemplates per-repo resolution (the primary path)', () => {
-  it('prefers a curated <repo>/.specflow/templates/{stage}.md over the default', async () => {
+  it('prefers a <repo>/.specflow/templates/{stage}.md over the default (repo-draft)', async () => {
     const dir = join(repo, '.specflow', 'templates');
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(join(dir, 'spec.md'), '# Curated spec prompt for THIS repo', 'utf-8');
 
     const t = new PromptTemplates();
     const resolved = await t.resolve(repo, 'spec');
-    expect(resolved.source).toBe('repo');
+    expect(resolved.source).toBe('repo-draft');
     expect(resolved.content).toContain('Curated spec prompt for THIS repo');
   });
 });
@@ -73,10 +73,58 @@ describe('PromptTemplates.render interpolation', () => {
   });
 });
 
-describe('PromptTemplates sub-agent generator seam', () => {
-  it('generateCuratedTemplate is a declared seam that throws in v1', async () => {
+describe('PromptTemplates sub-agent generator seam (Phase 2)', () => {
+  it('generateCuratedTemplate returns a RepoBrief (no longer throws)', async () => {
     const t = new PromptTemplates();
-    await expect(t.generateCuratedTemplate(repo, 'spec')).rejects.toThrow(/not implemented in v1/i);
+    const brief = await t.generateCuratedTemplate(repo, 'spec');
+    expect(brief).toHaveProperty('buildTool');
+    expect(brief).toHaveProperty('testFramework');
+    expect(brief).toHaveProperty('blueprintDefaults');
+  });
+});
+
+describe('PromptTemplates.writeRepoTemplate + resolve source enum', () => {
+  it('writeRepoTemplate persists to <repo>/.specflow/templates/{stage}.md', async () => {
+    const t = new PromptTemplates();
+    await t.writeRepoTemplate(repo, 'spec', '# My curated spec prompt');
+    const onDisk = await fs.readFile(join(repo, '.specflow', 'templates', 'spec.md'), 'utf-8');
+    expect(onDisk).toBe('# My curated spec prompt');
+  });
+
+  it('resolve returns repo-draft after writeRepoTemplate (no meta file)', async () => {
+    const t = new PromptTemplates();
+    await t.writeRepoTemplate(repo, 'test', '# Test prompt');
+    const resolved = await t.resolve(repo, 'test');
+    expect(resolved.source).toBe('repo-draft');
+  });
+
+  it('resolve returns repo-curated after marking as curated', async () => {
+    const t = new PromptTemplates();
+    await t.writeRepoTemplate(repo, 'design', '# Design prompt');
+    await t.markTemplateCurated(repo, 'design');
+    const resolved = await t.resolve(repo, 'design');
+    expect(resolved.source).toBe('repo-curated');
+  });
+
+  it('resolve still returns blueprint-default when no repo template exists', async () => {
+    const t = new PromptTemplates();
+    const resolved = await t.resolve(repo, 'deploy');
+    expect(resolved.source).toBe('blueprint-default');
+  });
+
+  it('listTemplates returns all 8 stages with their source', async () => {
+    const t = new PromptTemplates();
+    await t.writeRepoTemplate(repo, 'spec', '# Spec');
+    await t.markTemplateCurated(repo, 'spec');
+    await t.writeRepoTemplate(repo, 'design', '# Design draft');
+    const list = await t.listTemplates(repo);
+    expect(list).toHaveLength(8);
+    const spec = list.find((t) => t.stageId === 'spec');
+    expect(spec?.source).toBe('repo-curated');
+    const design = list.find((t) => t.stageId === 'design');
+    expect(design?.source).toBe('repo-draft');
+    const ops = list.find((t) => t.stageId === 'ops');
+    expect(ops?.source).toBe('blueprint-default');
   });
 });
 

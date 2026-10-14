@@ -1,4 +1,4 @@
-import type { RepoEntry, SpecFile, StageId } from './types';
+import type { RepoEntry, SpecFile, StageId, TemplateSummary } from './types';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -54,6 +54,14 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ stageId, comment }),
     }).then((r) => json<SpecFile>(r)),
+
+  listTemplates: (repoId: string) =>
+    fetch(`/api/repos/${repoId}/templates`).then((r) => json<TemplateSummary[]>(r)),
+
+  markTemplateCurated: (repoId: string, stageId: StageId) =>
+    fetch(`/api/repos/${repoId}/templates/${stageId}/curate`, {
+      method: 'POST',
+    }).then((r) => json<{ ok: boolean }>(r)),
 };
 
 /** Subscribe to live backend events; returns an unsubscribe fn. */

@@ -54,7 +54,9 @@ describe('MCP server exposes the tool set', () => {
         'get_stage_prompt',
         'list_repos',
         'list_specs',
+        'propose_repo_templates',
         'record_ai_output',
+        'write_repo_template',
       ].sort()
     );
   });
@@ -120,6 +122,54 @@ describe('MCP advance_stage gating (the core guarantee)', () => {
     });
     expect(res.isError).toBeFalsy();
     expect(parse(res).stages[1].id).toBe('requirements');
+  });
+});
+
+describe('MCP propose_repo_templates', () => {
+  it('returns a RepoBrief with buildTool and testFramework', async () => {
+    const res: any = await client.callTool({
+      name: 'propose_repo_templates',
+      arguments: { repoId },
+    });
+    const brief = parse(res);
+    expect(brief).toHaveProperty('buildTool');
+    expect(brief).toHaveProperty('testFramework');
+    expect(brief).toHaveProperty('blueprintDefaults');
+  });
+
+  it('includes Maven/JUnit signals when pom.xml contains junit', async () => {
+    await fs.writeFile(
+      join(repo, 'pom.xml'),
+      '<project><dependencies><dependency><groupId>junit</groupId></dependency></dependencies></project>',
+      'utf-8'
+    );
+    const res: any = await client.callTool({
+      name: 'propose_repo_templates',
+      arguments: { repoId },
+    });
+    const brief = parse(res);
+    expect(brief.buildTool).toBe('maven');
+    expect(brief.testFramework).toContain('junit');
+  });
+});
+
+describe('MCP write_repo_template', () => {
+  it('persists the template and get_stage_prompt returns it over blueprint default', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'T-1', title: 'x' } });
+
+    await client.callTool({
+      name: 'write_repo_template',
+      arguments: { repoId, stageId: 'spec', content: '# My curated spec\n{{ticketId}}' },
+    });
+
+    const res: any = await client.callTool({
+      name: 'get_stage_prompt',
+      arguments: { repoId, ticketId: 'T-1', stageId: 'spec' },
+    });
+    const payload = parse(res);
+    expect(payload.source).toBe('repo-draft');
+    expect(payload.content).toContain('My curated spec');
+    expect(payload.content).toContain('T-1');
   });
 });
 

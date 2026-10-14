@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { api, connectWs } from './api';
-import { STAGE_IDS, STAGE_LABELS, type RepoEntry, type SpecFile, type Stage, type StageId } from './types';
+import {
+  STAGE_IDS,
+  STAGE_LABELS,
+  type RepoEntry,
+  type SpecFile,
+  type Stage,
+  type StageId,
+  type TemplateSummary,
+  type TemplateSource,
+} from './types';
 
 export function App() {
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [specs, setSpecs] = useState<SpecFile[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<'board' | 'prompts'>('board');
 
   const refreshRepos = useCallback(async () => {
     const list = await api.listRepos();
@@ -65,15 +75,27 @@ export function App() {
         />
         <main className="flex-1 flex flex-col gap-4 overflow-hidden">
           {activeRepo && (
-            <NewSpec
-              onCreate={async (ticketId, title) => {
-                try {
-                  await api.createSpec(activeRepo, ticketId, title);
-                } catch (e) {
-                  setError(String((e as Error).message));
-                }
-              }}
-            />
+            <div className="flex items-center gap-3">
+              {view === 'board' && (
+                <NewSpec
+                  onCreate={async (ticketId, title) => {
+                    try {
+                      await api.createSpec(activeRepo, ticketId, title);
+                    } catch (e) {
+                      setError(String((e as Error).message));
+                    }
+                  }}
+                />
+              )}
+              <div className="ml-auto flex glass rounded-xl overflow-hidden shrink-0">
+                <TabButton active={view === 'board'} onClick={() => setView('board')}>
+                  Board
+                </TabButton>
+                <TabButton active={view === 'prompts'} onClick={() => setView('prompts')}>
+                  Prompts
+                </TabButton>
+              </div>
+            </div>
           )}
           {error && (
             <div className="glass rounded-xl px-4 py-2 text-sm text-red-300 border-red-400/40">
@@ -83,7 +105,10 @@ export function App() {
               </button>
             </div>
           )}
-          <Board repoId={activeRepo} specs={specs} />
+          {view === 'board' && <Board repoId={activeRepo} specs={specs} />}
+          {view === 'prompts' && activeRepo && (
+            <PromptsPanel repoId={activeRepo} onError={setError} />
+          )}
         </main>
       </div>
     </div>
@@ -403,6 +428,107 @@ function GateActions({
       >
         Reject
       </button>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-xs font-medium transition ${
+        active ? 'joule-gradient text-white' : 'text-joule-muted hover:text-joule-ink'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+const SOURCE_BADGE: Record<TemplateSource, { label: string; cls: string }> = {
+  'repo-curated': { label: 'curated', cls: 'bg-emerald-400/20 text-emerald-200' },
+  'repo-draft': { label: 'draft', cls: 'bg-amber-400/20 text-amber-200' },
+  'blueprint-default': { label: 'blueprint', cls: 'bg-white/10 text-joule-muted' },
+};
+
+function PromptsPanel({ repoId, onError }: { repoId: string; onError: (e: string) => void }) {
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [expanded, setExpanded] = useState<StageId | null>(null);
+  const [curating, setCurating] = useState<StageId | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setTemplates(await api.listTemplates(repoId));
+    } catch (e) {
+      onError(String((e as Error).message));
+    }
+  }, [repoId, onError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="glass rounded-2xl flex-1 flex flex-col gap-0 overflow-auto">
+      <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+        <h2 className="text-xs uppercase tracking-widest text-joule-muted font-semibold">
+          Prompt Templates
+        </h2>
+        <span className="text-[11px] text-joule-muted ml-auto">
+          Curate drafts after reviewing — curated templates are preferred over blueprint defaults
+        </span>
+      </div>
+      {templates.map((tpl) => {
+        const badge = SOURCE_BADGE[tpl.source];
+        const isExpanded = expanded === tpl.stageId;
+        return (
+          <div key={tpl.stageId} className="border-t border-white/5">
+            <div
+              className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-white/3 transition"
+              onClick={() => setExpanded(isExpanded ? null : tpl.stageId)}
+            >
+              <span className="text-sm font-medium w-28">{STAGE_LABELS[tpl.stageId]}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[11px] ${badge.cls}`}>
+                {badge.label}
+              </span>
+              {tpl.source === 'repo-draft' && (
+                <button
+                  disabled={curating === tpl.stageId}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setCurating(tpl.stageId);
+                    try {
+                      await api.markTemplateCurated(repoId, tpl.stageId);
+                      await load();
+                    } catch (err) {
+                      onError(String((err as Error).message));
+                    } finally {
+                      setCurating(null);
+                    }
+                  }}
+                  className="ml-auto rounded-lg joule-gradient text-white text-[11px] px-3 py-1 disabled:opacity-60"
+                >
+                  {curating === tpl.stageId ? 'Marking…' : 'Mark curated'}
+                </button>
+              )}
+              <span className="ml-auto text-joule-muted text-xs">{isExpanded ? '▲' : '▼'}</span>
+            </div>
+            {isExpanded && (
+              <pre className="mx-5 mb-3 rounded-xl bg-black/30 border border-white/5 px-4 py-3 text-[11px] text-joule-ink/80 overflow-auto whitespace-pre-wrap max-h-64">
+                {tpl.content}
+              </pre>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
