@@ -171,6 +171,42 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
     }
   });
 
+  /* ---- develop subtasks (Phase 3) ---- */
+  fastify.put<{
+    Params: { repoId: string; ticketId: string };
+    Body: {
+      subtasks?: Array<{ description: string; prompt?: string; requirementRef?: string }>;
+    };
+  }>(
+    '/api/repos/:repoId/specs/:ticketId/develop/subtasks',
+    async (req, reply) => {
+      const { subtasks } = req.body ?? {};
+      if (!Array.isArray(subtasks)) {
+        return reply.code(400).send({ error: 'subtasks array is required' });
+      }
+      try {
+        return await app.setDevelopSubtasks(req.params.repoId, req.params.ticketId, subtasks);
+      } catch (e) {
+        return reply.code(400).send({ error: String((e as Error).message) });
+      }
+    }
+  );
+
+  fastify.patch<{ Params: { repoId: string; ticketId: string; subtaskId: string } }>(
+    '/api/repos/:repoId/specs/:ticketId/develop/subtasks/:subtaskId/toggle',
+    async (req, reply) => {
+      try {
+        return await app.toggleSubtask(
+          req.params.repoId,
+          req.params.ticketId,
+          req.params.subtaskId
+        );
+      } catch (e) {
+        return reply.code(400).send({ error: String((e as Error).message) });
+      }
+    }
+  );
+
   // Serve the built SPA when present (production). The dashboard dist is copied
   // next to the compiled backend; in dev the Vite server proxies instead.
   const spaDir = join(dirname(fileURLToPath(import.meta.url)), 'public');

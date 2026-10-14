@@ -125,3 +125,77 @@ describe('Dashboard WebSocket live fan-out', () => {
     }
   });
 });
+
+describe('Dashboard subtask endpoints (Phase 3)', () => {
+  it('PUT .../develop/subtasks sets the list and returns updated spec', async () => {
+    await app.createSpec(repoId, 'T-1', 'Feature');
+    const res = await fastify.inject({
+      method: 'PUT',
+      url: `/api/repos/${repoId}/specs/T-1/develop/subtasks`,
+      payload: {
+        subtasks: [{ description: 'Write tests' }, { description: 'Implement' }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const develop = res.json().stages.find((s: any) => s.id === 'develop');
+    expect(develop.subtasks).toHaveLength(2);
+    expect(develop.subtasks[0].description).toBe('Write tests');
+  });
+
+  it('PUT .../develop/subtasks requires subtasks array', async () => {
+    await app.createSpec(repoId, 'T-1', 'x');
+    const res = await fastify.inject({
+      method: 'PUT',
+      url: `/api/repos/${repoId}/specs/T-1/develop/subtasks`,
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('PATCH .../develop/subtasks/:id/toggle flips the task', async () => {
+    await app.createSpec(repoId, 'T-1', 'Feature');
+    const spec = await app.setDevelopSubtasks(repoId, 'T-1', [{ description: 'Do it' }]);
+    const subtaskId = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
+
+    const res = await fastify.inject({
+      method: 'PATCH',
+      url: `/api/repos/${repoId}/specs/T-1/develop/subtasks/${subtaskId}/toggle`,
+    });
+    expect(res.statusCode).toBe(200);
+    const develop = res.json().stages.find((s: any) => s.id === 'develop');
+    expect(develop.subtasks[0].completed).toBe(true);
+  });
+
+  it('PATCH toggle returns 400 for unknown subtask id', async () => {
+    await app.createSpec(repoId, 'T-1', 'x');
+    const res = await fastify.inject({
+      method: 'PATCH',
+      url: `/api/repos/${repoId}/specs/T-1/develop/subtasks/nonexistent/toggle`,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('subtask changes are broadcast as spec.updated events over WS', async () => {
+    const { fastify: live } = await startDashboard(app, { port: 0 });
+    try {
+      const addr = live.server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      await new Promise<void>((resolve, reject) => {
+        ws.on('open', resolve);
+        ws.on('error', reject);
+      });
+      const received: any[] = [];
+      ws.on('message', (d) => received.push(JSON.parse(d.toString())));
+
+      await app.createSpec(repoId, 'T-1', 'x');
+      await app.setDevelopSubtasks(repoId, 'T-1', [{ description: 'Task' }]);
+      await new Promise((r) => setTimeout(r, 100));
+      ws.close();
+
+      expect(received.some((e) => e.type === 'spec.updated')).toBe(true);
+    } finally {
+      await live.close();
+    }
+  });
+});

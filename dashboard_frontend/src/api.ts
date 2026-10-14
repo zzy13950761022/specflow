@@ -62,6 +62,22 @@ export const api = {
     fetch(`/api/repos/${repoId}/templates/${stageId}/curate`, {
       method: 'POST',
     }).then((r) => json<{ ok: boolean }>(r)),
+
+  setSubtasks: (
+    repoId: string,
+    ticketId: string,
+    subtasks: Array<{ description: string; prompt?: string; requirementRef?: string }>
+  ) =>
+    fetch(`/api/repos/${repoId}/specs/${ticketId}/develop/subtasks`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ subtasks }),
+    }).then((r) => json<SpecFile>(r)),
+
+  toggleSubtask: (repoId: string, ticketId: string, subtaskId: string) =>
+    fetch(`/api/repos/${repoId}/specs/${ticketId}/develop/subtasks/${subtaskId}/toggle`, {
+      method: 'PATCH',
+    }).then((r) => json<SpecFile>(r)),
 };
 
 /** Subscribe to live backend events; returns an unsubscribe fn. */

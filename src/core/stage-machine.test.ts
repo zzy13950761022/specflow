@@ -140,3 +140,186 @@ describe('StageMachine.advance — the core gating invariant', () => {
     expect(() => sm.advance(spec, 'ops')).toThrow(/final stage/i);
   });
 });
+
+describe('StageMachine subtask methods (Phase 3)', () => {
+  function mkSpec() {
+    return new StageMachine().createSpec({ ticketId: 'ABC-1', title: 'x' });
+  }
+
+  describe('setSubtasks', () => {
+    it('replaces the develop subtask list wholesale', () => {
+      const sm = new StageMachine();
+      const spec = sm.setSubtasks(mkSpec(), [
+        { description: 'Write unit tests' },
+        { description: 'Implement feature' },
+      ]);
+      const develop = spec.stages.find((s) => s.id === 'develop')!;
+      expect(develop.subtasks).toHaveLength(2);
+      expect(develop.subtasks![0].description).toBe('Write unit tests');
+      expect(develop.subtasks![1].description).toBe('Implement feature');
+    });
+
+    it('assigns unique ids to each subtask', () => {
+      const sm = new StageMachine();
+      const spec = sm.setSubtasks(mkSpec(), [
+        { description: 'A' },
+        { description: 'B' },
+        { description: 'C' },
+      ]);
+      const ids = spec.stages.find((s) => s.id === 'develop')!.subtasks!.map((t) => t.id);
+      expect(new Set(ids).size).toBe(3);
+    });
+
+    it('all new subtasks start as not completed', () => {
+      const sm = new StageMachine();
+      const spec = sm.setSubtasks(mkSpec(), [{ description: 'Do something' }]);
+      const task = spec.stages.find((s) => s.id === 'develop')!.subtasks![0];
+      expect(task.completed).toBe(false);
+    });
+
+    it('preserves prompt and requirementRef if supplied', () => {
+      const sm = new StageMachine();
+      const spec = sm.setSubtasks(mkSpec(), [
+        { description: 'Task', prompt: 'Hint', requirementRef: 'REQ-1' },
+      ]);
+      const task = spec.stages.find((s) => s.id === 'develop')!.subtasks![0];
+      expect(task.prompt).toBe('Hint');
+      expect(task.requirementRef).toBe('REQ-1');
+    });
+
+    it('preserves order — first in, first out', () => {
+      const sm = new StageMachine();
+      const descs = ['Alpha', 'Beta', 'Gamma'];
+      const spec = sm.setSubtasks(mkSpec(), descs.map((d) => ({ description: d })));
+      const out = spec.stages.find((s) => s.id === 'develop')!.subtasks!.map((t) => t.description);
+      expect(out).toEqual(descs);
+    });
+
+    it('throws when called for a non-develop stage', () => {
+      const sm = new StageMachine();
+      expect(() => sm.setSubtasks(mkSpec(), [{ description: 'x' }], 'spec')).toThrow(
+        /only.*develop/i
+      );
+    });
+
+    it('updating subtasks bumps updatedAt', () => {
+      const sm = new StageMachine();
+      const before = mkSpec();
+      const after = sm.setSubtasks(before, [{ description: 'x' }]);
+      expect(after.updatedAt >= before.updatedAt).toBe(true);
+    });
+  });
+
+  describe('toggleSubtask', () => {
+    it('flips a false task to true', () => {
+      const sm = new StageMachine();
+      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
+      const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
+      spec = sm.toggleSubtask(spec, id);
+      expect(spec.stages.find((s) => s.id === 'develop')!.subtasks![0].completed).toBe(true);
+    });
+
+    it('flips a true task back to false', () => {
+      const sm = new StageMachine();
+      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
+      const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
+      spec = sm.toggleSubtask(spec, id); // → true
+      spec = sm.toggleSubtask(spec, id); // → false
+      expect(spec.stages.find((s) => s.id === 'develop')!.subtasks![0].completed).toBe(false);
+    });
+
+    it('only toggles the targeted subtask, leaves others unchanged', () => {
+      const sm = new StageMachine();
+      let spec = sm.setSubtasks(mkSpec(), [
+        { description: 'T1' },
+        { description: 'T2' },
+        { description: 'T3' },
+      ]);
+      const subtasks = spec.stages.find((s) => s.id === 'develop')!.subtasks!;
+      spec = sm.toggleSubtask(spec, subtasks[1].id);
+      const after = spec.stages.find((s) => s.id === 'develop')!.subtasks!;
+      expect(after[0].completed).toBe(false);
+      expect(after[1].completed).toBe(true);
+      expect(after[2].completed).toBe(false);
+    });
+
+    it('throws on unknown subtask id', () => {
+      const sm = new StageMachine();
+      const spec = sm.setSubtasks(mkSpec(), [{ description: 'x' }]);
+      expect(() => sm.toggleSubtask(spec, 'nonexistent')).toThrow(/unknown subtask/i);
+    });
+
+    it('bumps updatedAt', () => {
+      const sm = new StageMachine();
+      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T' }]);
+      const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
+      const before = spec.updatedAt;
+      spec = sm.toggleSubtask(spec, id);
+      expect(spec.updatedAt >= before).toBe(true);
+    });
+  });
+
+  describe('derived aiStatus from subtasks', () => {
+    it('aiStatus stays stubbed when subtasks are empty', () => {
+      const sm = new StageMachine();
+      const spec = sm.setSubtasks(mkSpec(), []);
+      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('stubbed');
+    });
+
+    it('aiStatus is in_progress when subtasks exist but none completed', () => {
+      const sm = new StageMachine();
+      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }, { description: 'T2' }]);
+      // Manually open the stage so it's not stubbed (simulate being reached)
+      const develop = spec.stages.find((s) => s.id === 'develop')!;
+      develop.aiCapability = 'auto';
+      develop.aiStatus = 'not_started';
+      spec = sm.setSubtasks(spec, [{ description: 'T1' }, { description: 'T2' }]);
+      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('in_progress');
+    });
+
+    it('aiStatus becomes done only when ALL subtasks are checked', () => {
+      const sm = new StageMachine();
+      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }, { description: 'T2' }]);
+      const develop = spec.stages.find((s) => s.id === 'develop')!;
+      develop.aiCapability = 'auto';
+      develop.aiStatus = 'not_started';
+      spec = sm.setSubtasks(spec, [{ description: 'T1' }, { description: 'T2' }]);
+
+      const ids = spec.stages.find((s) => s.id === 'develop')!.subtasks!.map((t) => t.id);
+      spec = sm.toggleSubtask(spec, ids[0]);
+      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('in_progress');
+
+      spec = sm.toggleSubtask(spec, ids[1]);
+      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('done');
+    });
+
+    it('un-checking a task reverts aiStatus from done back to in_progress', () => {
+      const sm = new StageMachine();
+      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
+      const develop = spec.stages.find((s) => s.id === 'develop')!;
+      develop.aiCapability = 'auto';
+      develop.aiStatus = 'not_started';
+      spec = sm.setSubtasks(spec, [{ description: 'T1' }]);
+
+      const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
+      spec = sm.toggleSubtask(spec, id); // done
+      spec = sm.toggleSubtask(spec, id); // back to in_progress
+      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('in_progress');
+    });
+
+    it('gate rule unchanged: DEVELOP gate still needs human approval to advance', () => {
+      const sm = new StageMachine();
+      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
+      const develop = spec.stages.find((s) => s.id === 'develop')!;
+      develop.aiCapability = 'auto';
+      develop.aiStatus = 'not_started';
+      spec = sm.setSubtasks(spec, [{ description: 'T1' }]);
+
+      const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
+      spec = sm.toggleSubtask(spec, id);
+      // aiStatus is now done but gate is still not_ready — advance must fail
+      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('done');
+      expect(() => sm.advance(spec, 'develop')).toThrow(GateNotApprovedError);
+    });
+  });
+});

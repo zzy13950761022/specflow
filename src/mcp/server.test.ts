@@ -56,6 +56,8 @@ describe('MCP server exposes the tool set', () => {
         'list_specs',
         'propose_repo_templates',
         'record_ai_output',
+        'set_develop_subtasks',
+        'toggle_subtask',
         'write_repo_template',
       ].sort()
     );
@@ -183,5 +185,52 @@ describe('MCP get_stage_prompt', () => {
     const payload = parse(res);
     expect(payload.content).toContain('ABC-1');
     expect(payload.source).toBe('blueprint-default');
+  });
+});
+
+describe('MCP set_develop_subtasks and toggle_subtask (Phase 3)', () => {
+  it('set_develop_subtasks creates the subtask list', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'T-1', title: 'x' } });
+    const res: any = await client.callTool({
+      name: 'set_develop_subtasks',
+      arguments: {
+        repoId,
+        ticketId: 'T-1',
+        subtasks: [{ description: 'Alpha' }, { description: 'Beta' }],
+      },
+    });
+    expect(res.isError).toBeFalsy();
+    const spec = parse(res);
+    const develop = spec.stages.find((s: any) => s.id === 'develop');
+    expect(develop.subtasks).toHaveLength(2);
+    expect(develop.subtasks[0].description).toBe('Alpha');
+  });
+
+  it('toggle_subtask flips the task completed flag', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'T-1', title: 'x' } });
+    const setRes: any = await client.callTool({
+      name: 'set_develop_subtasks',
+      arguments: { repoId, ticketId: 'T-1', subtasks: [{ description: 'Do it' }] },
+    });
+    const subtaskId = parse(setRes).stages.find((s: any) => s.id === 'develop').subtasks[0].id;
+
+    const toggleRes: any = await client.callTool({
+      name: 'toggle_subtask',
+      arguments: { repoId, ticketId: 'T-1', subtaskId },
+    });
+    expect(toggleRes.isError).toBeFalsy();
+    const spec = parse(toggleRes);
+    const task = spec.stages.find((s: any) => s.id === 'develop').subtasks[0];
+    expect(task.completed).toBe(true);
+  });
+
+  it('toggle_subtask returns an error for an unknown subtask id', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'T-1', title: 'x' } });
+    const res: any = await client.callTool({
+      name: 'toggle_subtask',
+      arguments: { repoId, ticketId: 'T-1', subtaskId: 'nonexistent-uuid' },
+    });
+    expect(res.isError).toBe(true);
+    expect(parse(res).error).toMatch(/unknown subtask/i);
   });
 });

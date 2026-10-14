@@ -53,14 +53,15 @@ export const GateSchema = z.object({
 });
 export type Gate = z.infer<typeof GateSchema>;
 
-/**
- * DEVELOP sub-task. v1 keeps the shape but implements no logic — the array is
- * a placeholder so lighting up DEVELOP later needs no migration.
- */
+/** DEVELOP sub-task. Phase 3 makes this real: ordered checklist, individually checkable. */
 export const SubtaskSchema = z.object({
   id: z.string(),
   description: z.string(),
   completed: z.boolean().default(false),
+  /** Per-subtask AI guidance shown when Claude works on this item. */
+  prompt: z.string().optional(),
+  /** Traceability back to a requirement artifact reference. */
+  requirementRef: z.string().optional(),
 });
 export type Subtask = z.infer<typeof SubtaskSchema>;
 
@@ -112,4 +113,22 @@ export const StageTargetInputSchema = z.object({
 
 export const RecordAiOutputInputSchema = StageTargetInputSchema.extend({
   content: z.string(),
+});
+
+export const SetDevelopSubtasksInputSchema = z.object({
+  repoId: z.string(),
+  ticketId: z.string(),
+  subtasks: z.array(
+    z.object({
+      description: z.string().min(1),
+      prompt: z.string().optional(),
+      requirementRef: z.string().optional(),
+    })
+  ),
+});
+
+export const ToggleSubtaskInputSchema = z.object({
+  repoId: z.string(),
+  ticketId: z.string(),
+  subtaskId: z.string(),
 });

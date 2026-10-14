@@ -7,6 +7,7 @@ import {
   type AiCapability,
   type GateStatus,
 } from './schemas.js';
+import { randomUUID } from 'crypto';
 
 /** Thrown when advance_stage is called but the current gate is not approved. */
 export class GateNotApprovedError extends Error {
@@ -88,6 +89,7 @@ export class StageMachine {
     });
   }
 
+  /** Throws GateNotApprovedError if the current gate isn't approved. */
   advance(spec: SpecFile, stageId: StageId): SpecFile {
     const stage = this.stage(spec, stageId);
     if (stage.gate.status !== 'approved') {
@@ -104,6 +106,42 @@ export class StageMachine {
     nextStage.gate.status = 'not_ready';
     next.updatedAt = now();
     return next;
+  }
+
+  /* ---- subtasks (Phase 3) ---- */
+
+  /**
+   * Replace the DEVELOP subtask list wholesale. Assigns fresh UUIDs, resets
+   * completed to false. Updates derived aiStatus.
+   */
+  setSubtasks(
+    spec: SpecFile,
+    inputs: Array<{ description: string; prompt?: string; requirementRef?: string }>,
+    stageId: StageId = 'develop'
+  ): SpecFile {
+    if (stageId !== 'develop') {
+      throw new Error(`setSubtasks is only valid for the develop stage, got "${stageId}"`);
+    }
+    return this.mutateStage(spec, stageId, (_next, stage) => {
+      stage.subtasks = inputs.map((t) => ({
+        id: randomUUID(),
+        description: t.description,
+        completed: false,
+        prompt: t.prompt,
+        requirementRef: t.requirementRef,
+      }));
+      this.deriveAiStatus(stage);
+    });
+  }
+
+  /** Toggle a single subtask's completed flag; updates derived aiStatus. */
+  toggleSubtask(spec: SpecFile, subtaskId: string): SpecFile {
+    return this.mutateStage(spec, 'develop', (_next, stage) => {
+      const task = (stage.subtasks ?? []).find((t) => t.id === subtaskId);
+      if (!task) throw new Error(`Unknown subtask id: ${subtaskId}`);
+      task.completed = !task.completed;
+      this.deriveAiStatus(stage);
+    });
   }
 
   /* ---- internals ---- */
@@ -137,5 +175,16 @@ export class StageMachine {
       comment: stage.gate.comment,
       at: now(),
     });
+  }
+
+  /**
+   * Derive DEVELOP aiStatus from the subtask list. Only runs when the stage is
+   * not stubbed (aiCapability = auto). Keeps gate logic unchanged.
+   */
+  private deriveAiStatus(stage: Stage): void {
+    if (stage.aiCapability === 'stub') return;
+    const tasks = stage.subtasks ?? [];
+    if (tasks.length === 0) return;
+    stage.aiStatus = tasks.every((t) => t.completed) ? 'done' : 'in_progress';
   }
 }

@@ -192,6 +192,51 @@ export function buildMcpServer(app: AppCore): McpServer {
     }
   );
 
+  server.registerTool(
+    'set_develop_subtasks',
+    {
+      description:
+        'Replace the DEVELOP stage subtask checklist wholesale. Each entry has a ' +
+        'description and optional prompt (per-subtask AI guidance) and requirementRef. ' +
+        'Existing subtasks are discarded. aiStatus is derived automatically.',
+      inputSchema: {
+        repoId: z.string(),
+        ticketId: z.string(),
+        subtasks: z.array(
+          z.object({
+            description: z.string().min(1),
+            prompt: z.string().optional(),
+            requirementRef: z.string().optional(),
+          })
+        ),
+      },
+    },
+    async ({ repoId, ticketId, subtasks }) => {
+      try {
+        return ok(await app.setDevelopSubtasks(repoId, ticketId, subtasks));
+      } catch (e) {
+        return fail(String((e as Error).message));
+      }
+    }
+  );
+
+  server.registerTool(
+    'toggle_subtask',
+    {
+      description:
+        'Toggle a single DEVELOP subtask between completed and not-completed. ' +
+        'aiStatus derives automatically: done only when all subtasks are checked.',
+      inputSchema: { repoId: z.string(), ticketId: z.string(), subtaskId: z.string() },
+    },
+    async ({ repoId, ticketId, subtaskId }) => {
+      try {
+        return ok(await app.toggleSubtask(repoId, ticketId, subtaskId));
+      } catch (e) {
+        return fail(String((e as Error).message));
+      }
+    }
+  );
+
   return server;
 }
 

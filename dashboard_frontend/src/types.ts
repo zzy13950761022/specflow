@@ -37,7 +37,13 @@ export interface Stage {
   aiCapability: AiCapability;
   gate: Gate;
   artifactPath?: string;
-  subtasks?: Array<{ id: string; description: string; completed: boolean }>;
+  subtasks?: Array<{
+    id: string;
+    description: string;
+    completed: boolean;
+    prompt?: string;
+    requirementRef?: string;
+  }>;
 }
 
 export interface SpecFile {

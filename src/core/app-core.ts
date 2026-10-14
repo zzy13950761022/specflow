@@ -142,6 +142,26 @@ export class AppCore {
     return this.persist(repoId, path, this.stageMachine.advance(spec, stageId));
   }
 
+  /* ---- develop subtasks (Phase 3) ---- */
+
+  /** Replace the DEVELOP subtask list wholesale; updates derived aiStatus. */
+  async setDevelopSubtasks(
+    repoId: string,
+    ticketId: string,
+    subtasks: Array<{ description: string; prompt?: string; requirementRef?: string }>
+  ): Promise<SpecFile> {
+    const path = await this.repoPath(repoId);
+    const spec = await this.requireSpec(path, ticketId);
+    return this.persist(repoId, path, this.stageMachine.setSubtasks(spec, subtasks));
+  }
+
+  /** Toggle a single subtask's completed flag; updates derived aiStatus. */
+  async toggleSubtask(repoId: string, ticketId: string, subtaskId: string): Promise<SpecFile> {
+    const path = await this.repoPath(repoId);
+    const spec = await this.requireSpec(path, ticketId);
+    return this.persist(repoId, path, this.stageMachine.toggleSubtask(spec, subtaskId));
+  }
+
   /* ---- internals ---- */
 
   private async requireSpec(path: string, ticketId: string): Promise<SpecFile> {
