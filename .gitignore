@@ -6,3 +6,4 @@ dashboard_frontend/dist/
 .specflow/
 test-results/
 playwright-report/
+.idea/
