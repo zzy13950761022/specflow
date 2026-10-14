@@ -1,0 +1,44 @@
+@import 'tailwindcss';
+
+/* Joule-inspired dark glassmorphism palette. */
+@theme {
+  --color-joule-bg: #1a1033;
+  --color-joule-bg-2: #241247;
+  --color-joule-purple: #7858ff;
+  --color-joule-blue: #4a9fff;
+  --color-joule-ink: #ece9fb;
+  --color-joule-muted: #a89fd4;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(120, 88, 255, 0.25), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(74, 159, 255, 0.18), transparent 55%),
+    var(--color-joule-bg);
+  color: var(--color-joule-ink);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* Frosted glass card. */
+.glass {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+/* Purple->blue gradient accent (progress bars, active chips). */
+.joule-gradient {
+  background: linear-gradient(90deg, var(--color-joule-purple), var(--color-joule-blue));
+}
+
+.joule-glow {
+  box-shadow: 0 0 24px rgba(120, 88, 255, 0.45);
+}
