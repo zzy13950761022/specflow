@@ -141,7 +141,7 @@ curated and `get_stage_prompt` returns it over the blueprint default.
 
 ---
 
-## Phase 3 — DEVELOP sub-task checklist
+## Phase 3 — DEVELOP sub-task checklist ✅ DONE (committed)
 
 **Goal.** Make the `subtasks: []` placeholder on the DEVELOP stage real: a spec's
 DEVELOP stage holds an ordered checklist of implementation sub-tasks (the old

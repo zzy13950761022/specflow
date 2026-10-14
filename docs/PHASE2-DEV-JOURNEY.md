@@ -3,7 +3,7 @@
 这篇文档记录 Phase 2 的**完整思考过程**——从读需求到写代码，包括遇到的每一个 Bug、
 为什么这样设计、以及做了哪些权衡。目标读者是"想把这个项目变成自己的"的你。
 
-姊妹篇：`DEV-JOURNEY.md`（Phase 1 的决策过程）、`LEARN-TYPESCRIPT.md`（TypeScript 语法）。
+姊妹篇：`PHASE1-DEV-JOURNEY.md`（Phase 1 的决策过程）、`LEARN-TYPESCRIPT.md`（TypeScript 语法）。
 
 ---
 
