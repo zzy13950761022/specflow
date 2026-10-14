@@ -18,6 +18,16 @@ export const api = {
       body: JSON.stringify({ path }),
     }).then((r) => json<RepoEntry>(r)),
 
+  /**
+   * Open the native OS folder picker (server-side) and register the chosen
+   * folder. Resolves to null if the user cancelled (HTTP 204).
+   */
+  pickRepo: async (): Promise<RepoEntry | null> => {
+    const res = await fetch('/api/repos/pick', { method: 'POST' });
+    if (res.status === 204) return null;
+    return json<RepoEntry>(res);
+  },
+
   removeRepo: (id: string) =>
     fetch(`/api/repos/${id}`, { method: 'DELETE' }).then((r) => json(r)),
 

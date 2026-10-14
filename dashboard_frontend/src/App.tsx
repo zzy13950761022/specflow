@@ -54,6 +54,14 @@ export function App() {
               setError(String((e as Error).message));
             }
           }}
+          onBrowse={async () => {
+            try {
+              const r = await api.pickRepo();
+              if (r) setActiveRepo(r.id);
+            } catch (e) {
+              setError(String((e as Error).message));
+            }
+          }}
         />
         <main className="flex-1 flex flex-col gap-4 overflow-hidden">
           {activeRepo && (
@@ -101,13 +109,18 @@ function Sidebar({
   activeRepo,
   onSelect,
   onAdd,
+  onBrowse,
 }: {
   repos: RepoEntry[];
   activeRepo: string | null;
   onSelect: (id: string) => void;
   onAdd: (path: string) => void;
+  onBrowse: () => Promise<void>;
 }) {
   const [path, setPath] = useState('');
+  const [manual, setManual] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+
   return (
     <aside className="glass rounded-2xl w-64 p-4 flex flex-col gap-3 shrink-0">
       <h2 className="text-xs uppercase tracking-widest text-joule-muted">Repositories</h2>
@@ -127,25 +140,65 @@ function Sidebar({
         ))}
       </div>
       <div className="mt-auto flex flex-col gap-2">
-        <input
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          placeholder="/path/to/repo"
-          className="bg-black/30 rounded-lg px-3 py-2 text-sm outline-none border border-white/10 focus:border-joule-purple"
-        />
         <button
-          onClick={() => {
-            if (path.trim()) {
-              onAdd(path.trim());
-              setPath('');
+          disabled={browsing}
+          onClick={async () => {
+            setBrowsing(true);
+            try {
+              await onBrowse();
+            } finally {
+              setBrowsing(false);
             }
           }}
-          className="joule-gradient rounded-lg px-3 py-2 text-sm font-medium text-white"
+          className="joule-gradient rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-60 flex items-center justify-center gap-2"
         >
-          Add repo
+          <FolderIcon />
+          {browsing ? 'Opening Finder…' : 'Add repo'}
         </button>
+
+        <button
+          onClick={() => setManual((m) => !m)}
+          className="text-[11px] text-joule-muted hover:text-joule-ink self-center"
+        >
+          {manual ? 'hide manual entry' : 'or enter a path manually'}
+        </button>
+
+        {manual && (
+          <div className="flex flex-col gap-2">
+            <input
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="/path/to/repo"
+              className="bg-black/30 rounded-lg px-3 py-2 text-sm outline-none border border-white/10 focus:border-joule-purple"
+            />
+            <button
+              onClick={() => {
+                if (path.trim()) {
+                  onAdd(path.trim());
+                  setPath('');
+                }
+              }}
+              className="rounded-lg bg-white/10 hover:bg-white/15 px-3 py-2 text-sm"
+            >
+              Add by path
+            </button>
+          </div>
+        )}
       </div>
     </aside>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

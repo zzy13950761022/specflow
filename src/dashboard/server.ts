@@ -7,6 +7,7 @@ import { existsSync } from 'fs';
 import { AppCore } from '../core/app-core.js';
 import { StageIdSchema } from '../core/schemas.js';
 import { logger } from '../core/logger.js';
+import { pickFolder } from './folder-picker.js';
 import type { WebSocket } from 'ws';
 
 /**
@@ -49,6 +50,19 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
 
   /* ---- repos ---- */
   fastify.get('/api/repos', async () => app.listRepos());
+
+  // Open a native OS folder picker (runs in this Node process) and, if the
+  // user picks a folder, register it. The browser can't read real paths, so
+  // selection must happen server-side.
+  fastify.post('/api/repos/pick', async (_req, reply) => {
+    try {
+      const path = await pickFolder();
+      if (!path) return reply.code(204).send();
+      return await app.addRepo(path);
+    } catch (e) {
+      return reply.code(400).send({ error: String((e as Error).message) });
+    }
+  });
 
   fastify.post<{ Body: { path?: string } }>('/api/repos', async (req, reply) => {
     const path = req.body?.path;

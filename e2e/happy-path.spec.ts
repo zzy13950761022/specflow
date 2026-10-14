@@ -60,9 +60,11 @@ test('happy path: add repo, create spec, Claude records output, human approves, 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'AI Pilot' })).toBeVisible();
 
-  // Add a repo by path.
+  // Add a repo by path. The native Finder picker can't be automated, so use
+  // the manual-entry fallback (toggle it open first).
+  await page.getByRole('button', { name: 'or enter a path manually' }).click();
   await page.getByPlaceholder('/path/to/repo').fill(repo);
-  await page.getByRole('button', { name: 'Add repo' }).click();
+  await page.getByRole('button', { name: 'Add by path' }).click();
   await expect(page.getByText(repo, { exact: false })).toBeVisible();
 
   // Create a spec via the UI.
