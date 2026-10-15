@@ -67,16 +67,38 @@ if the design needs a security review.
 
   develop: `# Stage 3 — Development: {{ticketId}} {{title}}
 
-Implement [ClassName/component] for [business logic description].
-Use our existing patterns: [paste a relevant class or snippet from your repo].
-Wire up these dependencies: [list].
-Handle these error cases: [list from acceptance criteria].
+Based on the approved design:
+{{upstreamArtifact}}
+
+## Phase A — Task Planning (submit via record_ai_output, then wait for approval)
+
+Generate a structured implementation task list. Use set_develop_subtasks to register
+each task. For each subtask include:
+- description: what to build
+- prompt: role, task detail, restrictions, success criteria
+- requirementRef: which requirement it implements
+- leverage: existing files/utilities to reuse
+
+Submit a markdown summary of the task list via record_ai_output. Human reviews
+and approves the plan before any code is written.
+
+## Phase B — Implementation (after gate approved)
+
+For each subtask, in order:
+1. Search existing implementation logs via get_implementation_logs to avoid duplication.
+2. Read the subtask prompt field for role and guidance.
+3. Write the code using Write/Edit tools — follow repo conventions from CLAUDE.md.
+4. Call log_implementation with full artifacts (MANDATORY before marking done):
+   - summary, filesModified, filesCreated, statistics
+   - artifacts: apiEndpoints / components / functions / classes / integrations
+5. Call toggle_subtask to mark the subtask completed.
+6. Move to the next subtask.
 
 Developer rules:
 - Review every line of generated code before committing.
-- Add \`// AI-assisted\` on files where >50% is AI-generated (metrics).
+- Add \`// AI-assisted\` on files where >50% is AI-generated.
 - Run the local build and tests before pushing.
-- Claude Code never pushes — developers commit and push.
+- Never push — developers commit and push.
 `,
 
   test: `# Stage 4 — Testing: {{ticketId}} {{title}}

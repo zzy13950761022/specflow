@@ -50,10 +50,12 @@ describe('MCP server exposes the tool set', () => {
         'advance_stage',
         'create_spec',
         'get_approval_status',
+        'get_implementation_logs',
         'get_spec',
         'get_stage_prompt',
         'list_repos',
         'list_specs',
+        'log_implementation',
         'propose_repo_templates',
         'record_ai_output',
         'request_revision',
@@ -364,5 +366,87 @@ describe('MCP request_revision (needs-revision three-verdict)', () => {
     expect(res.isError).toBeFalsy();
     expect(parse(res).stages[0].gate.status).toBe('pending_review');
     expect(parse(res).stages[0].aiStatus).toBe('done');
+  });
+});
+
+describe('MCP log_implementation and get_implementation_logs', () => {
+  const implInput = {
+    summary: 'Implemented inventory deduction logic',
+    filesModified: ['src/inventory/inventory.ts'],
+    filesCreated: ['src/inventory/deduct.ts'],
+    statistics: { linesAdded: 80, linesRemoved: 5 },
+    artifacts: {
+      functions: [
+        { name: 'deductStock', purpose: 'Atomically deduct inventory', location: 'src/inventory/deduct.ts:10', isExported: true },
+      ],
+    },
+  };
+
+  it('log_implementation writes a log and returns logId + nextSteps', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'IL-1', title: 'x' } });
+    const setRes: any = await client.callTool({
+      name: 'set_develop_subtasks',
+      arguments: { repoId, ticketId: 'IL-1', subtasks: [{ description: 'Implement deduction' }] },
+    });
+    const subtaskId = parse(setRes).stages.find((s: any) => s.id === 'develop').subtasks[0].id;
+
+    const res: any = await client.callTool({
+      name: 'log_implementation',
+      arguments: { repoId, ticketId: 'IL-1', subtaskId, ...implInput },
+    });
+    expect(res.isError).toBeFalsy();
+    const payload = parse(res);
+    expect(payload.ok).toBe(true);
+    expect(payload.logId).toBeTruthy();
+    expect(payload.nextSteps[0]).toMatch(/toggle_subtask/i);
+  });
+
+  it('get_implementation_logs returns the written log', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'IL-2', title: 'x' } });
+    const setRes: any = await client.callTool({
+      name: 'set_develop_subtasks',
+      arguments: { repoId, ticketId: 'IL-2', subtasks: [{ description: 'Do something' }] },
+    });
+    const subtaskId = parse(setRes).stages.find((s: any) => s.id === 'develop').subtasks[0].id;
+    await client.callTool({
+      name: 'log_implementation',
+      arguments: { repoId, ticketId: 'IL-2', subtaskId, ...implInput },
+    });
+
+    const res: any = await client.callTool({
+      name: 'get_implementation_logs',
+      arguments: { repoId, ticketId: 'IL-2' },
+    });
+    expect(res.isError).toBeFalsy();
+    const logs = parse(res);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].summary).toBe(implInput.summary);
+    expect(logs[0].filesCreated).toEqual(implInput.filesCreated);
+  });
+
+  it('get_implementation_logs filters by subtaskId', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'IL-3', title: 'x' } });
+    const setRes: any = await client.callTool({
+      name: 'set_develop_subtasks',
+      arguments: { repoId, ticketId: 'IL-3', subtasks: [{ description: 'A' }, { description: 'B' }] },
+    });
+    const subtasks = parse(setRes).stages.find((s: any) => s.id === 'develop').subtasks;
+    // log only for first subtask
+    await client.callTool({
+      name: 'log_implementation',
+      arguments: { repoId, ticketId: 'IL-3', subtaskId: subtasks[0].id, ...implInput },
+    });
+
+    const filtered: any = await client.callTool({
+      name: 'get_implementation_logs',
+      arguments: { repoId, ticketId: 'IL-3', subtaskId: subtasks[1].id },
+    });
+    expect(parse(filtered)).toHaveLength(0);
+
+    const all: any = await client.callTool({
+      name: 'get_implementation_logs',
+      arguments: { repoId, ticketId: 'IL-3' },
+    });
+    expect(parse(all)).toHaveLength(1);
   });
 });

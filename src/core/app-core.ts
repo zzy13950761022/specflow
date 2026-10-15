@@ -3,7 +3,8 @@ import { SpecStore } from './spec-store.js';
 import { StageMachine } from './stage-machine.js';
 import { EventBus } from './event-bus.js';
 import { PromptTemplates, type ResolvedTemplate, type TemplateSummary } from '../prompts/templates.js';
-import { STAGE_IDS, type SpecFile, type StageId, type ArtifactInput } from './schemas.js';
+import { ImplLogStore } from './impl-log-store.js';
+import { STAGE_IDS, type SpecFile, type StageId, type ArtifactInput, type ImplArtifacts, type ImplementationLog } from './schemas.js';
 import { logger } from './logger.js';
 import type { RepoBrief } from './repo-introspector.js';
 
@@ -18,6 +19,7 @@ export class AppCore {
   readonly stageMachine = new StageMachine();
   readonly templates = new PromptTemplates();
   readonly events = new EventBus();
+  readonly implLogs = new ImplLogStore();
 
   /* ---- repos ---- */
 
@@ -190,6 +192,35 @@ export class AppCore {
       logger.warn('Could not read artifact', stage.artifact.path, String(err));
       return null;
     }
+  }
+
+  /* ---- implementation logs (develop stage) ---- */
+
+  /** Record a subtask implementation after the code is written. */
+  async logImplementation(
+    repoId: string,
+    ticketId: string,
+    subtaskId: string,
+    input: {
+      summary: string;
+      filesModified: string[];
+      filesCreated: string[];
+      statistics: { linesAdded: number; linesRemoved: number };
+      artifacts: ImplArtifacts;
+    }
+  ): Promise<ImplementationLog> {
+    const path = await this.repoPath(repoId);
+    return this.implLogs.write(path, ticketId, subtaskId, input);
+  }
+
+  /** Read implementation logs for a ticket, optionally filtered by subtask. */
+  async getImplementationLogs(
+    repoId: string,
+    ticketId: string,
+    subtaskId?: string
+  ): Promise<ImplementationLog[]> {
+    const path = await this.repoPath(repoId);
+    return this.implLogs.list(path, ticketId, subtaskId);
   }
 
   /* ---- internals ---- */

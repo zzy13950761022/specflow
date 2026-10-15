@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { AppCore } from '../core/app-core.js';
-import { StageIdSchema, type ArtifactInput } from '../core/schemas.js';
+import { StageIdSchema, ImplArtifactsSchema, type ArtifactInput } from '../core/schemas.js';
 import { GateNotApprovedError } from '../core/stage-machine.js';
 import { logger } from '../core/logger.js';
 
@@ -320,6 +320,70 @@ export function buildMcpServer(app: AppCore): McpServer {
     async ({ repoId, ticketId, subtaskId }) => {
       try {
         return ok(await app.toggleSubtask(repoId, ticketId, subtaskId));
+      } catch (e) {
+        return fail(String((e as Error).message));
+      }
+    }
+  );
+
+  server.registerTool(
+    'log_implementation',
+    {
+      description:
+        'Record a subtask implementation after the code is written to disk. ' +
+        'MANDATORY: call this for every subtask BEFORE toggling it completed. ' +
+        'A subtask without an implementation log is NOT complete. ' +
+        'The log feeds context to subsequent test/build stages so they know what was built. ' +
+        'artifacts must include at least one of: apiEndpoints, components, functions, classes, integrations.',
+      inputSchema: {
+        repoId: z.string(),
+        ticketId: z.string(),
+        subtaskId: z.string(),
+        summary: z.string().min(1),
+        filesModified: z.array(z.string()),
+        filesCreated: z.array(z.string()),
+        statistics: z.object({
+          linesAdded: z.number().int().min(0),
+          linesRemoved: z.number().int().min(0),
+        }),
+        artifacts: ImplArtifactsSchema,
+      },
+    },
+    async ({ repoId, ticketId, subtaskId, summary, filesModified, filesCreated, statistics, artifacts }) => {
+      try {
+        const log = await app.logImplementation(repoId, ticketId, subtaskId, {
+          summary, filesModified, filesCreated, statistics, artifacts,
+        });
+        return ok({
+          ok: true,
+          logId: log.id,
+          nextSteps: [
+            `Implementation logged. Now call toggle_subtask to mark subtask "${subtaskId}" completed, then move to the next subtask.`,
+          ],
+        });
+      } catch (e) {
+        return fail(String((e as Error).message));
+      }
+    }
+  );
+
+  server.registerTool(
+    'get_implementation_logs',
+    {
+      description:
+        'Read implementation logs for a ticket. Use this at the start of test/build stages ' +
+        'to understand what was built during develop: which files were created/modified, ' +
+        'what API endpoints and components exist, and integration patterns. ' +
+        'Optionally filter by subtaskId to get logs for a specific subtask.',
+      inputSchema: {
+        repoId: z.string(),
+        ticketId: z.string(),
+        subtaskId: z.string().optional(),
+      },
+    },
+    async ({ repoId, ticketId, subtaskId }) => {
+      try {
+        return ok(await app.getImplementationLogs(repoId, ticketId, subtaskId));
       } catch (e) {
         return fail(String((e as Error).message));
       }

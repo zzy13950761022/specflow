@@ -66,8 +66,67 @@ export const SubtaskSchema = z.object({
   prompt: z.string().optional(),
   /** Traceability back to a requirement artifact reference. */
   requirementRef: z.string().optional(),
+  /** Existing files/utilities Claude should reuse when implementing this task. */
+  leverage: z.array(z.string()).optional(),
 });
 export type Subtask = z.infer<typeof SubtaskSchema>;
+
+/** A single implementation log entry written after a subtask is coded. */
+export const ImplArtifactsSchema = z.object({
+  apiEndpoints: z.array(z.object({
+    method: z.string(),
+    path: z.string(),
+    purpose: z.string(),
+    location: z.string(),
+    requestFormat: z.string().optional(),
+    responseFormat: z.string().optional(),
+  })).optional(),
+  components: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    purpose: z.string(),
+    location: z.string(),
+    props: z.string().optional(),
+    exports: z.array(z.string()).optional(),
+  })).optional(),
+  functions: z.array(z.object({
+    name: z.string(),
+    purpose: z.string(),
+    location: z.string(),
+    signature: z.string().optional(),
+    isExported: z.boolean(),
+  })).optional(),
+  classes: z.array(z.object({
+    name: z.string(),
+    purpose: z.string(),
+    location: z.string(),
+    methods: z.array(z.string()).optional(),
+    isExported: z.boolean(),
+  })).optional(),
+  integrations: z.array(z.object({
+    description: z.string(),
+    frontendComponent: z.string(),
+    backendEndpoint: z.string(),
+    dataFlow: z.string(),
+  })).optional(),
+});
+export type ImplArtifacts = z.infer<typeof ImplArtifactsSchema>;
+
+export const ImplementationLogSchema = z.object({
+  id: z.string(),
+  ticketId: z.string(),
+  subtaskId: z.string(),
+  summary: z.string(),
+  filesModified: z.array(z.string()),
+  filesCreated: z.array(z.string()),
+  statistics: z.object({
+    linesAdded: z.number(),
+    linesRemoved: z.number(),
+  }),
+  artifacts: ImplArtifactsSchema,
+  createdAt: z.string(),
+});
+export type ImplementationLog = z.infer<typeof ImplementationLogSchema>;
 
 /**
  * Typed artifact model (Phase 4). A discriminated union by kind:
@@ -261,6 +320,7 @@ export const SetDevelopSubtasksInputSchema = z.object({
       description: z.string().min(1),
       prompt: z.string().optional(),
       requirementRef: z.string().optional(),
+      leverage: z.array(z.string()).optional(),
     })
   ),
 });
@@ -269,4 +329,24 @@ export const ToggleSubtaskInputSchema = z.object({
   repoId: z.string(),
   ticketId: z.string(),
   subtaskId: z.string(),
+});
+
+export const LogImplementationInputSchema = z.object({
+  repoId: z.string(),
+  ticketId: z.string(),
+  subtaskId: z.string(),
+  summary: z.string().min(1),
+  filesModified: z.array(z.string()),
+  filesCreated: z.array(z.string()),
+  statistics: z.object({
+    linesAdded: z.number().int().min(0),
+    linesRemoved: z.number().int().min(0),
+  }),
+  artifacts: ImplArtifactsSchema,
+});
+
+export const GetImplementationLogsInputSchema = z.object({
+  repoId: z.string(),
+  ticketId: z.string(),
+  subtaskId: z.string().optional(),
 });
