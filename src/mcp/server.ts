@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { AppCore } from '../core/app-core.js';
-import { StageIdSchema } from '../core/schemas.js';
+import { StageIdSchema, type ArtifactInput } from '../core/schemas.js';
 import { GateNotApprovedError } from '../core/stage-machine.js';
 import { logger } from '../core/logger.js';
 
@@ -137,17 +137,47 @@ export function buildMcpServer(app: AppCore): McpServer {
     {
       description:
         "Persist Claude's artifact for a stage, mark the AI action done, and " +
-        'flip the human gate to pending_review.',
+        'flip the human gate to pending_review. ' +
+        'For DEPLOY stages, supply checklistItems (and optionally rollbackCriteria) to create a structured deploy-checklist artifact. ' +
+        'For OPS stages, supply logsSanitized (true/false) to create an ops-report artifact — the governance flag is surfaced in the dashboard. ' +
+        'All other stages default to a markdown artifact.',
       inputSchema: {
         repoId: z.string(),
         ticketId: z.string(),
         stageId: StageIdSchema,
         content: z.string(),
+        checklistItems: z
+          .array(
+            z.object({
+              id: z.string().optional(),
+              description: z.string().min(1),
+              checked: z.boolean().default(false),
+              governanceFlag: z.enum(['pci', 'gdpr', 'none']).default('none'),
+            })
+          )
+          .optional(),
+        rollbackCriteria: z.string().optional(),
+        logsSanitized: z.boolean().optional(),
+        rcaPath: z.string().optional(),
+        runbookPath: z.string().optional(),
+        metrics: z
+          .object({
+            stageCoverage: z.number().optional(),
+            cycleTimeMs: z.number().optional(),
+            buildSuccess: z.boolean().optional(),
+          })
+          .optional(),
       },
     },
-    async ({ repoId, ticketId, stageId, content }) => {
+    async ({ repoId, ticketId, stageId, content, checklistItems, rollbackCriteria, logsSanitized, rcaPath, runbookPath, metrics }) => {
       try {
-        return ok(await app.recordAiOutput(repoId, ticketId, stageId, content));
+        let artifactInput: ArtifactInput | undefined;
+        if (stageId === 'deploy' && checklistItems) {
+          artifactInput = { kind: 'deploy-checklist', items: checklistItems, rollbackCriteria };
+        } else if (stageId === 'ops') {
+          artifactInput = { kind: 'ops-report', logsSanitized: logsSanitized ?? false, rcaPath, runbookPath, metrics };
+        }
+        return ok(await app.recordAiOutput(repoId, ticketId, stageId, content, artifactInput));
       } catch (e) {
         return fail(String((e as Error).message));
       }

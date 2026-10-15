@@ -110,7 +110,9 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
     try {
       const content = await app.readArtifact(req.params.repoId, req.params.ticketId, stage.data);
       if (content === null) return reply.code(404).send({ error: 'no artifact for this stage' });
-      return { stageId: stage.data, content };
+      const spec = await app.getSpec(req.params.repoId, req.params.ticketId);
+      const artifactMeta = spec?.stages.find((s) => s.id === stage.data)?.artifact ?? null;
+      return { stageId: stage.data, content, artifact: artifactMeta };
     } catch (e) {
       return reply.code(404).send({ error: String((e as Error).message) });
     }

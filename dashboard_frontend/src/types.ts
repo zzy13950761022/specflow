@@ -31,12 +31,48 @@ export interface Gate {
   reviewedAt?: string;
 }
 
+/** Phase 4: typed artifact model. */
+export interface MarkdownArtifact {
+  kind: 'markdown';
+  path: string;
+}
+
+export interface DeployChecklistItem {
+  id: string;
+  description: string;
+  checked: boolean;
+  governanceFlag: 'pci' | 'gdpr' | 'none';
+}
+
+export interface DeployChecklistArtifact {
+  kind: 'deploy-checklist';
+  path: string;
+  items: DeployChecklistItem[];
+  status: 'pending' | 'in_progress' | 'completed' | 'rolled_back';
+  rollbackCriteria?: string;
+}
+
+export interface OpsReportArtifact {
+  kind: 'ops-report';
+  path: string;
+  logsSanitized: boolean;
+  rcaPath?: string;
+  runbookPath?: string;
+  metrics?: {
+    stageCoverage?: number;
+    cycleTimeMs?: number;
+    buildSuccess?: boolean;
+  };
+}
+
+export type Artifact = MarkdownArtifact | DeployChecklistArtifact | OpsReportArtifact;
+
 export interface Stage {
   id: StageId;
   aiStatus: AiStatus;
   aiCapability: AiCapability;
   gate: Gate;
-  artifactPath?: string;
+  artifact?: Artifact;
   subtasks?: Array<{
     id: string;
     description: string;

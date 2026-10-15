@@ -6,6 +6,7 @@ import {
   type StageId,
   type AiCapability,
   type GateStatus,
+  type Artifact,
 } from './schemas.js';
 import { randomUUID } from 'crypto';
 
@@ -67,12 +68,12 @@ export class StageMachine {
   recordAiOutput(
     spec: SpecFile,
     stageId: StageId,
-    artifactPath: string,
+    artifact: Artifact,
     historyEntry?: { path: string; at: string }
   ): SpecFile {
     return this.mutateStage(spec, stageId, (next, stage) => {
       stage.aiStatus = 'done';
-      stage.artifactPath = artifactPath;
+      stage.artifact = artifact;
       if (historyEntry) {
         stage.artifactHistory = [...(stage.artifactHistory ?? []), historyEntry];
       }

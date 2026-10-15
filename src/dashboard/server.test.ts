@@ -83,7 +83,7 @@ describe('Dashboard REST', () => {
     expect(res.json().stages[0].gate.comment).toBe('needs detail');
   });
 
-  it('GET artifact returns the recorded stage content', async () => {
+  it('GET artifact returns the recorded stage content and artifact metadata', async () => {
     await app.createSpec(repoId, 'ABC-1', 'x');
     await app.recordAiOutput(repoId, 'ABC-1', 'spec', '# generated spec body');
     const res = await fastify.inject({
@@ -91,7 +91,10 @@ describe('Dashboard REST', () => {
       url: `/api/repos/${repoId}/specs/ABC-1/artifact?stageId=spec`,
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ stageId: 'spec', content: '# generated spec body' });
+    const body = res.json();
+    expect(body.stageId).toBe('spec');
+    expect(body.content).toBe('# generated spec body');
+    expect(body.artifact?.kind).toBe('markdown');
   });
 
   it('GET artifact 400s on a missing/invalid stageId', async () => {

@@ -3,7 +3,7 @@ import { SpecStore } from './spec-store.js';
 import { StageMachine } from './stage-machine.js';
 import { EventBus } from './event-bus.js';
 import { PromptTemplates, type ResolvedTemplate, type TemplateSummary } from '../prompts/templates.js';
-import { STAGE_IDS, type SpecFile, type StageId } from './schemas.js';
+import { STAGE_IDS, type SpecFile, type StageId, type ArtifactInput } from './schemas.js';
 import { logger } from './logger.js';
 import type { RepoBrief } from './repo-introspector.js';
 
@@ -107,19 +107,21 @@ export class AppCore {
     repoId: string,
     ticketId: string,
     stageId: StageId,
-    content: string
+    content: string,
+    artifactInput?: ArtifactInput
   ): Promise<SpecFile> {
     const path = await this.repoPath(repoId);
     const spec = await this.requireSpec(path, ticketId);
     const stageIndex = STAGE_IDS.indexOf(stageId);
-    const { path: artifactPath, history } = await this.store.writeArtifact(
+    const { artifact, history } = await this.store.writeArtifact(
       path,
       ticketId,
       stageId,
       stageIndex,
-      content
+      content,
+      artifactInput
     );
-    const next = this.stageMachine.recordAiOutput(spec, stageId, artifactPath, history);
+    const next = this.stageMachine.recordAiOutput(spec, stageId, artifact, history);
     return this.persist(repoId, path, next);
   }
 
@@ -173,13 +175,13 @@ export class AppCore {
     const path = await this.repoPath(repoId);
     const spec = await this.requireSpec(path, ticketId);
     const stage = spec.stages.find((s) => s.id === stageId);
-    if (!stage?.artifactPath) return null;
+    if (!stage?.artifact?.path) return null;
     try {
       const { readFile } = await import('fs/promises');
       const { join } = await import('path');
-      return await readFile(join(path, stage.artifactPath), 'utf-8');
+      return await readFile(join(path, stage.artifact.path), 'utf-8');
     } catch (err) {
-      logger.warn('Could not read artifact', stage.artifactPath, String(err));
+      logger.warn('Could not read artifact', stage.artifact.path, String(err));
       return null;
     }
   }
@@ -206,13 +208,13 @@ export class AppCore {
     const index = STAGE_IDS.indexOf(stageId);
     if (index <= 0) return undefined;
     const prev = spec.stages[index - 1];
-    if (!prev.artifactPath) return undefined;
+    if (!prev.artifact?.path) return undefined;
     try {
       const { readFile } = await import('fs/promises');
       const { join } = await import('path');
-      return await readFile(join(path, prev.artifactPath), 'utf-8');
+      return await readFile(join(path, prev.artifact.path), 'utf-8');
     } catch (err) {
-      logger.warn('Could not read upstream artifact', prev.artifactPath, String(err));
+      logger.warn('Could not read upstream artifact', prev.artifact.path, String(err));
       return undefined;
     }
   }

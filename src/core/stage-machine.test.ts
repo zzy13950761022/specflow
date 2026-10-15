@@ -51,11 +51,45 @@ describe('StageMachine.recordAiOutput', () => {
   it('marks aiStatus done and flips gate to pending_review', () => {
     const sm = new StageMachine();
     let spec = sm.createSpec({ ticketId: 'ABC-1', title: 'x' });
-    spec = sm.recordAiOutput(spec, 'spec', '.specflow/.../0-spec.md');
+    spec = sm.recordAiOutput(spec, 'spec', { kind: 'markdown', path: '.specflow/.../0-spec.md' });
     const stage = spec.stages[0];
     expect(stage.aiStatus).toBe('done');
     expect(stage.gate.status).toBe('pending_review');
-    expect(stage.artifactPath).toBe('.specflow/.../0-spec.md');
+    expect(stage.artifact?.path).toBe('.specflow/.../0-spec.md');
+    expect(stage.artifact?.kind).toBe('markdown');
+  });
+
+  it('stores a deploy-checklist artifact with items', () => {
+    const sm = new StageMachine();
+    let spec = sm.createSpec({ ticketId: 'DEPLOY-1', title: 'Deployment' });
+    spec = sm.recordAiOutput(spec, 'deploy', {
+      kind: 'deploy-checklist',
+      path: '.specflow/artifacts/DEPLOY-1/6-deploy.md',
+      items: [{ id: 'i1', description: 'Step 1', checked: false, governanceFlag: 'pci' }],
+      status: 'pending',
+    });
+    const stage = spec.stages.find((s) => s.id === 'deploy')!;
+    expect(stage.aiStatus).toBe('done');
+    expect(stage.artifact?.kind).toBe('deploy-checklist');
+    if (stage.artifact?.kind === 'deploy-checklist') {
+      expect(stage.artifact.items).toHaveLength(1);
+      expect(stage.artifact.items[0].governanceFlag).toBe('pci');
+    }
+  });
+
+  it('stores an ops-report artifact with logsSanitized flag', () => {
+    const sm = new StageMachine();
+    let spec = sm.createSpec({ ticketId: 'OPS-1', title: 'Ops' });
+    spec = sm.recordAiOutput(spec, 'ops', {
+      kind: 'ops-report',
+      path: '.specflow/artifacts/OPS-1/7-ops.md',
+      logsSanitized: true,
+    });
+    const stage = spec.stages.find((s) => s.id === 'ops')!;
+    expect(stage.artifact?.kind).toBe('ops-report');
+    if (stage.artifact?.kind === 'ops-report') {
+      expect(stage.artifact.logsSanitized).toBe(true);
+    }
   });
 });
 
@@ -63,7 +97,7 @@ describe('StageMachine gate: approve / reject', () => {
   it('approve sets gate.status approved', () => {
     const sm = new StageMachine();
     let spec = sm.createSpec({ ticketId: 'ABC-1', title: 'x' });
-    spec = sm.recordAiOutput(spec, 'spec', 'p');
+    spec = sm.recordAiOutput(spec, 'spec', { kind: 'markdown', path: 'p' });
     spec = sm.approve(spec, 'spec');
     expect(spec.stages[0].gate.status).toBe('approved');
   });
@@ -71,7 +105,7 @@ describe('StageMachine gate: approve / reject', () => {
   it('reject routes back to in_progress and records the comment', () => {
     const sm = new StageMachine();
     let spec = sm.createSpec({ ticketId: 'ABC-1', title: 'x' });
-    spec = sm.recordAiOutput(spec, 'spec', 'p');
+    spec = sm.recordAiOutput(spec, 'spec', { kind: 'markdown', path: 'p' });
     spec = sm.reject(spec, 'spec', 'needs more detail');
     expect(spec.stages[0].gate.status).toBe('rejected');
     expect(spec.stages[0].gate.comment).toBe('needs more detail');
@@ -81,9 +115,9 @@ describe('StageMachine gate: approve / reject', () => {
   it('records every gate transition in gateHistory', () => {
     const sm = new StageMachine();
     let spec = sm.createSpec({ ticketId: 'ABC-1', title: 'x' });
-    spec = sm.recordAiOutput(spec, 'spec', 'p');
+    spec = sm.recordAiOutput(spec, 'spec', { kind: 'markdown', path: 'p' });
     spec = sm.reject(spec, 'spec', 'no');
-    spec = sm.recordAiOutput(spec, 'spec', 'p');
+    spec = sm.recordAiOutput(spec, 'spec', { kind: 'markdown', path: 'p' });
     spec = sm.approve(spec, 'spec');
     const specGate = spec.gateHistory.filter((h) => h.stageId === 'spec');
     expect(specGate.map((h) => h.to)).toContain('approved');
@@ -95,7 +129,7 @@ describe('StageMachine.advance — the core gating invariant', () => {
   it('REFUSES to advance when the current gate is not approved', () => {
     const sm = new StageMachine();
     let spec = sm.createSpec({ ticketId: 'ABC-1', title: 'x' });
-    spec = sm.recordAiOutput(spec, 'spec', 'p'); // gate = pending_review
+    spec = sm.recordAiOutput(spec, 'spec', { kind: 'markdown', path: 'p' });
     expect(() => sm.advance(spec, 'spec')).toThrow(GateNotApprovedError);
   });
 
@@ -108,7 +142,7 @@ describe('StageMachine.advance — the core gating invariant', () => {
   it('advances to the next stage once the gate is approved', () => {
     const sm = new StageMachine();
     let spec = sm.createSpec({ ticketId: 'ABC-1', title: 'x' });
-    spec = sm.recordAiOutput(spec, 'spec', 'p');
+    spec = sm.recordAiOutput(spec, 'spec', { kind: 'markdown', path: 'p' });
     spec = sm.approve(spec, 'spec');
     spec = sm.advance(spec, 'spec');
     // requirements stage is now open for its AI action
@@ -122,9 +156,9 @@ describe('StageMachine.advance — the core gating invariant', () => {
 
     const cases: Array<{ gate: string; mutate: (s: typeof base) => typeof base; ok: boolean }> = [
       { gate: 'not_ready', mutate: (s) => s, ok: false },
-      { gate: 'pending_review', mutate: (s) => sm.recordAiOutput(s, 'spec', 'p'), ok: false },
-      { gate: 'rejected', mutate: (s) => sm.reject(sm.recordAiOutput(s, 'spec', 'p'), 'spec', 'no'), ok: false },
-      { gate: 'approved', mutate: (s) => sm.approve(sm.recordAiOutput(s, 'spec', 'p'), 'spec'), ok: true },
+      { gate: 'pending_review', mutate: (s) => sm.recordAiOutput(s, 'spec', { kind: 'markdown', path: 'p' }), ok: false },
+      { gate: 'rejected', mutate: (s) => sm.reject(sm.recordAiOutput(s, 'spec', { kind: 'markdown', path: 'p' }), 'spec', 'no'), ok: false },
+      { gate: 'approved', mutate: (s) => sm.approve(sm.recordAiOutput(s, 'spec', { kind: 'markdown', path: 'p' }), 'spec'), ok: true },
     ];
 
     for (const c of cases) {

@@ -79,16 +79,17 @@ describe('SpecStore concurrency', () => {
 describe('SpecStore.writeArtifact', () => {
   it('writes the stage-0 product to specs/{TICKET}.md', async () => {
     const store = new SpecStore();
-    const { path: rel } = await store.writeArtifact(repo, 'ABC-1', 'spec', 0, '# Spec');
-    expect(rel).toBe(join('specs', 'ABC-1.md'));
-    const content = await fs.readFile(join(repo, rel), 'utf-8');
+    const { artifact } = await store.writeArtifact(repo, 'ABC-1', 'spec', 0, '# Spec');
+    expect(artifact.path).toBe(join('specs', 'ABC-1.md'));
+    expect(artifact.kind).toBe('markdown');
+    const content = await fs.readFile(join(repo, artifact.path), 'utf-8');
     expect(content).toBe('# Spec');
   });
 
   it('writes later-stage products under .specflow/artifacts', async () => {
     const store = new SpecStore();
-    const { path: rel } = await store.writeArtifact(repo, 'ABC-1', 'requirements', 1, '# Reqs');
-    expect(rel).toBe(join('.specflow', 'artifacts', 'ABC-1', '1-requirements.md'));
+    const { artifact } = await store.writeArtifact(repo, 'ABC-1', 'requirements', 1, '# Reqs');
+    expect(artifact.path).toBe(join('.specflow', 'artifacts', 'ABC-1', '1-requirements.md'));
   });
 
   it('also writes a timestamped history copy and returns its entry', async () => {
@@ -98,5 +99,85 @@ describe('SpecStore.writeArtifact', () => {
     expect(history.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     const snapshot = await fs.readFile(join(repo, history.path), 'utf-8');
     expect(snapshot).toBe('# Spec');
+  });
+
+  it('returns a deploy-checklist artifact with items when kind is deploy-checklist', async () => {
+    const store = new SpecStore();
+    const { artifact } = await store.writeArtifact(repo, 'DEPLOY-1', 'deploy', 6, '# Deploy plan', {
+      kind: 'deploy-checklist',
+      items: [
+        { description: 'Run DB migration', governanceFlag: 'pci' },
+        { description: 'Smoke test checkout', checked: true },
+      ],
+      rollbackCriteria: 'Revert if error rate > 1%',
+    });
+    expect(artifact.kind).toBe('deploy-checklist');
+    if (artifact.kind !== 'deploy-checklist') return;
+    expect(artifact.items).toHaveLength(2);
+    expect(artifact.items[0].description).toBe('Run DB migration');
+    expect(artifact.items[0].governanceFlag).toBe('pci');
+    expect(artifact.items[1].checked).toBe(true);
+    expect(artifact.rollbackCriteria).toBe('Revert if error rate > 1%');
+    expect(artifact.status).toBe('pending');
+  });
+
+  it('returns an ops-report artifact with logsSanitized flag', async () => {
+    const store = new SpecStore();
+    const { artifact } = await store.writeArtifact(repo, 'OPS-1', 'ops', 7, '# Ops report', {
+      kind: 'ops-report',
+      logsSanitized: true,
+      rcaPath: '.specflow/artifacts/OPS-1/rca.md',
+      metrics: { stageCoverage: 100, buildSuccess: true },
+    });
+    expect(artifact.kind).toBe('ops-report');
+    if (artifact.kind !== 'ops-report') return;
+    expect(artifact.logsSanitized).toBe(true);
+    expect(artifact.rcaPath).toBe('.specflow/artifacts/OPS-1/rca.md');
+    expect(artifact.metrics?.stageCoverage).toBe(100);
+  });
+
+  it('round-trips deploy-checklist artifact through SpecStore write/read', async () => {
+    const store = new SpecStore();
+    let spec = sm.createSpec({ ticketId: 'DEPLOY-1', title: 'Deployment' });
+    const { artifact, history } = await store.writeArtifact(
+      repo, 'DEPLOY-1', 'deploy', 6, '# Deploy plan',
+      { kind: 'deploy-checklist', items: [{ description: 'Step 1' }] }
+    );
+    // Simulate what StageMachine.recordAiOutput does
+    const stage = spec.stages.find((s) => s.id === 'deploy')!;
+    stage.artifact = artifact;
+    stage.artifactHistory = [history];
+    stage.aiStatus = 'done';
+    stage.gate.status = 'pending_review';
+    spec.gateHistory.push({ stageId: 'deploy', from: 'not_ready', to: 'pending_review', at: new Date().toISOString() });
+    await store.write(repo, spec);
+    const read = await store.read(repo, 'DEPLOY-1');
+    const deployStage = read!.stages.find((s) => s.id === 'deploy')!;
+    expect(deployStage.artifact?.kind).toBe('deploy-checklist');
+    if (deployStage.artifact?.kind === 'deploy-checklist') {
+      expect(deployStage.artifact.items[0].description).toBe('Step 1');
+    }
+  });
+
+  it('round-trips ops-report artifact through SpecStore write/read', async () => {
+    const store = new SpecStore();
+    let spec = sm.createSpec({ ticketId: 'OPS-1', title: 'Ops' });
+    const { artifact, history } = await store.writeArtifact(
+      repo, 'OPS-1', 'ops', 7, '# Ops report',
+      { kind: 'ops-report', logsSanitized: false }
+    );
+    const stage = spec.stages.find((s) => s.id === 'ops')!;
+    stage.artifact = artifact;
+    stage.artifactHistory = [history];
+    stage.aiStatus = 'done';
+    stage.gate.status = 'pending_review';
+    spec.gateHistory.push({ stageId: 'ops', from: 'not_ready', to: 'pending_review', at: new Date().toISOString() });
+    await store.write(repo, spec);
+    const read = await store.read(repo, 'OPS-1');
+    const opsStage = read!.stages.find((s) => s.id === 'ops')!;
+    expect(opsStage.artifact?.kind).toBe('ops-report');
+    if (opsStage.artifact?.kind === 'ops-report') {
+      expect(opsStage.artifact.logsSanitized).toBe(false);
+    }
   });
 });

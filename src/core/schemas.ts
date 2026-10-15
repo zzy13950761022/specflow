@@ -7,7 +7,7 @@ import { z } from 'zod';
  * all agree on one shape.
  */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** The eight stages, in fixed order. Index == position on the board. */
 export const STAGE_IDS = [
@@ -69,12 +69,108 @@ export const SubtaskSchema = z.object({
 });
 export type Subtask = z.infer<typeof SubtaskSchema>;
 
+/**
+ * Typed artifact model (Phase 4). A discriminated union by kind:
+ *   - markdown: prose AI output (default for spec/req/design/develop/test/build)
+ *   - deploy-checklist: structured deployment gate checklist
+ *   - ops-report: ops governance artifact with log-sanitization flag
+ *
+ * All kinds record a canonical file path so the content can always be read off
+ * disk. Structured kinds additionally carry domain-specific fields that the
+ * dashboard renders natively and the machine can gate on.
+ */
+export const MarkdownArtifactSchema = z.object({
+  kind: z.literal('markdown'),
+  path: z.string(),
+});
+
+export const DeployChecklistItemSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  checked: z.boolean().default(false),
+  /** Flags items that touch payment or GDPR-scoped data per the SAP blueprint. */
+  governanceFlag: z.enum(['pci', 'gdpr', 'none']).default('none'),
+});
+
+export const DeployChecklistArtifactSchema = z.object({
+  kind: z.literal('deploy-checklist'),
+  path: z.string(),
+  items: z.array(DeployChecklistItemSchema),
+  /** Overall deployment status derived from item checks. */
+  status: z.enum(['pending', 'in_progress', 'completed', 'rolled_back']).default('pending'),
+  rollbackCriteria: z.string().optional(),
+});
+
+export const OpsReportArtifactSchema = z.object({
+  kind: z.literal('ops-report'),
+  path: z.string(),
+  /**
+   * Governance gate: all logs must be sanitized before an ops-report artifact
+   * can be considered 'done'. The dashboard surfaces this flag prominently.
+   */
+  logsSanitized: z.boolean(),
+  rcaPath: z.string().optional(),
+  runbookPath: z.string().optional(),
+  metrics: z
+    .object({
+      stageCoverage: z.number().optional(),
+      cycleTimeMs: z.number().optional(),
+      buildSuccess: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+export const ArtifactSchema = z.discriminatedUnion('kind', [
+  MarkdownArtifactSchema,
+  DeployChecklistArtifactSchema,
+  OpsReportArtifactSchema,
+]);
+export type Artifact = z.infer<typeof ArtifactSchema>;
+export type MarkdownArtifact = z.infer<typeof MarkdownArtifactSchema>;
+export type DeployChecklistArtifact = z.infer<typeof DeployChecklistArtifactSchema>;
+export type DeployChecklistItem = z.infer<typeof DeployChecklistItemSchema>;
+export type OpsReportArtifact = z.infer<typeof OpsReportArtifactSchema>;
+
+/**
+ * Input shape for recordAiOutput — path is computed by SpecStore, so callers
+ * supply all fields except path.
+ */
+export type ArtifactInput =
+  | { kind: 'markdown' }
+  | {
+      kind: 'deploy-checklist';
+      items?: Array<{
+        id?: string;
+        description: string;
+        checked?: boolean;
+        governanceFlag?: 'pci' | 'gdpr' | 'none';
+      }>;
+      rollbackCriteria?: string;
+      status?: 'pending' | 'in_progress' | 'completed' | 'rolled_back';
+    }
+  | {
+      kind: 'ops-report';
+      logsSanitized: boolean;
+      rcaPath?: string;
+      runbookPath?: string;
+      metrics?: {
+        stageCoverage?: number;
+        cycleTimeMs?: number;
+        buildSuccess?: boolean;
+      };
+    };
+
 export const StageSchema = z.object({
   id: StageIdSchema,
   aiStatus: AiStatusSchema,
   aiCapability: AiCapabilitySchema,
   gate: GateSchema,
-  artifactPath: z.string().optional(),
+  /**
+   * Typed artifact produced by the AI action for this stage (Phase 4).
+   * Replaces the bare `artifactPath` string. Convenience: `stage.artifact?.path`
+   * gives the file path for all kinds.
+   */
+  artifact: ArtifactSchema.optional(),
   // Timestamped copies of every AI output recorded for this stage, oldest first.
   // Feeds a future snapshot/diff view; writing is cheap, querying comes later.
   artifactHistory: z
@@ -122,6 +218,39 @@ export const StageTargetInputSchema = z.object({
 
 export const RecordAiOutputInputSchema = StageTargetInputSchema.extend({
   content: z.string(),
+  /**
+   * For deploy-checklist stages: structured checklist items. When omitted, the
+   * artifact is stored as plain markdown.
+   */
+  checklistItems: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        description: z.string().min(1),
+        checked: z.boolean().default(false),
+        governanceFlag: z.enum(['pci', 'gdpr', 'none']).default('none'),
+      })
+    )
+    .optional(),
+  /** For deploy-checklist stages: rollback criteria prose. */
+  rollbackCriteria: z.string().optional(),
+  /**
+   * For ops-report stages: whether all logs have been sanitized. Required when
+   * stageId is 'ops'. If false, the record is accepted but governance surfaced.
+   */
+  logsSanitized: z.boolean().optional(),
+  /** For ops-report stages: path to the RCA document. */
+  rcaPath: z.string().optional(),
+  /** For ops-report stages: path to the runbook. */
+  runbookPath: z.string().optional(),
+  /** For ops-report stages: optional metrics snapshot. */
+  metrics: z
+    .object({
+      stageCoverage: z.number().optional(),
+      cycleTimeMs: z.number().optional(),
+      buildSuccess: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export const SetDevelopSubtasksInputSchema = z.object({

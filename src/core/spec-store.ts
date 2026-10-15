@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
-import { SpecFileSchema, type SpecFile, type StageId } from './schemas.js';
+import { SpecFileSchema, type SpecFile, type StageId, type Artifact, type ArtifactInput } from './schemas.js';
 
 /**
  * Reads/writes spec files inside a repo's .specflow directory. Files are the
@@ -78,20 +78,27 @@ export class SpecStore {
 
   /**
    * Write a stage's AI artifact plus a timestamped history copy. Returns the
-   * canonical repo-relative path and the history entry (path + timestamp).
+   * typed Artifact (with canonical path set) and a history entry.
+   * - markdown kinds write content to a .md file
+   * - structured kinds (deploy-checklist, ops-report) serialize their fields
+   *   to JSON at a .json sidecar path; the `path` in the returned artifact
+   *   points to a human-readable .md summary for backward compat
    */
   async writeArtifact(
     repoPath: string,
     ticketId: string,
     stageId: StageId,
     stageIndex: number,
-    content: string
-  ): Promise<{ path: string; history: { path: string; at: string } }> {
+    content: string,
+    artifactInput?: ArtifactInput
+  ): Promise<{ artifact: Artifact; history: { path: string; at: string } }> {
+    const kind = artifactInput?.kind ?? 'markdown';
     const rel =
       stageId === 'spec'
         ? // Stage 0 product is the canonical human spec, lives in specs/.
           join('specs', `${ticketId}.md`)
         : join('.specflow', 'artifacts', ticketId, `${stageIndex}-${stageId}.md`);
+
     await this.atomicWrite(join(repoPath, rel), content);
 
     const at = new Date().toISOString();
@@ -104,7 +111,34 @@ export class SpecStore {
     );
     await this.atomicWrite(join(repoPath, historyRel), content);
 
-    return { path: rel, history: { path: historyRel, at } };
+    let artifact: Artifact;
+    if (kind === 'deploy-checklist' && artifactInput?.kind === 'deploy-checklist') {
+      artifact = {
+        kind: 'deploy-checklist',
+        path: rel,
+        items: (artifactInput.items ?? []).map((item) => ({
+          id: item.id ?? crypto.randomUUID(),
+          description: item.description,
+          checked: item.checked ?? false,
+          governanceFlag: item.governanceFlag ?? 'none',
+        })),
+        status: artifactInput.status ?? 'pending',
+        rollbackCriteria: artifactInput.rollbackCriteria,
+      };
+    } else if (kind === 'ops-report' && artifactInput?.kind === 'ops-report') {
+      artifact = {
+        kind: 'ops-report',
+        path: rel,
+        logsSanitized: artifactInput.logsSanitized,
+        rcaPath: artifactInput.rcaPath,
+        runbookPath: artifactInput.runbookPath,
+        metrics: artifactInput.metrics,
+      };
+    } else {
+      artifact = { kind: 'markdown', path: rel };
+    }
+
+    return { artifact, history: { path: historyRel, at } };
   }
 
   /** Atomic file write (temp + rename), creating parent dirs as needed. */

@@ -5,6 +5,9 @@ import { api, connectWs } from './api';
 import {
   STAGE_IDS,
   STAGE_LABELS,
+  type Artifact,
+  type DeployChecklistArtifact,
+  type OpsReportArtifact,
   type RepoEntry,
   type SpecFile,
   type Stage,
@@ -507,6 +510,7 @@ function ReviewModal({
   onClose: () => void;
 }) {
   const [content, setContent] = useState<string | null>(null);
+  const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -514,7 +518,11 @@ function ReviewModal({
     let alive = true;
     api
       .getArtifact(repoId, ticketId, stageId)
-      .then((res) => alive && setContent(res.content))
+      .then((res) => {
+        if (!alive) return;
+        setContent(res.content);
+        setArtifact(res.artifact);
+      })
       .catch((e) => alive && setErr(String((e as Error).message)))
       .finally(() => alive && setLoading(false));
     return () => {
@@ -548,6 +556,11 @@ function ReviewModal({
           <span className="text-xs text-joule-muted truncate" title={title}>
             {title}
           </span>
+          {artifact && (
+            <span className="text-[10px] rounded-full bg-white/5 px-2 py-0.5 text-joule-muted ml-1">
+              {artifact.kind}
+            </span>
+          )}
           <button
             onClick={onClose}
             className="ml-auto text-joule-muted hover:text-joule-ink text-lg leading-none"
@@ -560,7 +573,13 @@ function ReviewModal({
         <div className="flex-1 overflow-auto px-6 py-5">
           {loading && <p className="text-sm text-joule-muted">Loading…</p>}
           {err && <p className="text-sm text-red-300">{err}</p>}
-          {!loading && !err && content !== null && (
+          {!loading && !err && content !== null && artifact?.kind === 'deploy-checklist' && (
+            <DeployChecklistView artifact={artifact as DeployChecklistArtifact} content={content} />
+          )}
+          {!loading && !err && content !== null && artifact?.kind === 'ops-report' && (
+            <OpsReportView artifact={artifact as OpsReportArtifact} content={content} />
+          )}
+          {!loading && !err && content !== null && (!artifact || artifact.kind === 'markdown') && (
             <div className="md-body">
               <ReactMarkdown>{content}</ReactMarkdown>
             </div>
@@ -573,6 +592,120 @@ function ReviewModal({
       </div>
     </div>,
     document.body
+  );
+}
+
+/** Render a deploy-checklist artifact: shows each item with governance flags. */
+function DeployChecklistView({
+  artifact,
+  content,
+}: {
+  artifact: DeployChecklistArtifact;
+  content: string;
+}) {
+  const GOVERNANCE_BADGE: Record<string, string> = {
+    pci: 'bg-yellow-400/20 text-yellow-200',
+    gdpr: 'bg-purple-400/20 text-purple-200',
+    none: '',
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-joule-muted">Status:</span>
+        <span className="text-xs rounded-full bg-white/10 px-2 py-0.5">{artifact.status}</span>
+        {artifact.rollbackCriteria && (
+          <span className="text-xs text-amber-300/80 italic ml-auto">↩ {artifact.rollbackCriteria}</span>
+        )}
+      </div>
+      <ul className="flex flex-col gap-2">
+        {artifact.items.map((item) => (
+          <li key={item.id} className="flex items-start gap-2 rounded-lg bg-white/5 px-3 py-2">
+            <span
+              className={`mt-0.5 w-4 h-4 rounded shrink-0 flex items-center justify-center text-[10px] ${item.checked ? 'joule-gradient text-white' : 'border border-white/20'}`}
+            >
+              {item.checked ? '✓' : ''}
+            </span>
+            <span className={`text-sm flex-1 ${item.checked ? 'line-through text-joule-muted' : ''}`}>
+              {item.description}
+            </span>
+            {item.governanceFlag !== 'none' && (
+              <span className={`text-[10px] rounded-full px-1.5 py-0.5 shrink-0 ${GOVERNANCE_BADGE[item.governanceFlag]}`}>
+                {item.governanceFlag.toUpperCase()}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {content && (
+        <details className="text-xs text-joule-muted">
+          <summary className="cursor-pointer">Raw markdown</summary>
+          <div className="md-body mt-2">
+            <ReactMarkdown>{content}</ReactMarkdown>
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** Render an ops-report artifact: surfaces governance flags prominently. */
+function OpsReportView({
+  artifact,
+  content,
+}: {
+  artifact: OpsReportArtifact;
+  content: string;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-joule-muted">Log sanitization:</span>
+        <span
+          className={`text-xs font-semibold rounded-full px-2 py-0.5 ${artifact.logsSanitized ? 'bg-emerald-400/20 text-emerald-200' : 'bg-red-400/20 text-red-300'}`}
+        >
+          {artifact.logsSanitized ? '✓ Sanitized' : '⚠ NOT SANITIZED'}
+        </span>
+      </div>
+      {!artifact.logsSanitized && (
+        <p className="text-xs text-red-300 bg-red-400/10 rounded-lg px-3 py-2">
+          Governance: logs must be sanitized before this artifact can be considered complete.
+        </p>
+      )}
+      {artifact.metrics && (
+        <div className="grid grid-cols-3 gap-2">
+          {artifact.metrics.stageCoverage !== undefined && (
+            <div className="rounded-lg bg-white/5 px-3 py-2 text-center">
+              <div className="text-lg font-bold">{artifact.metrics.stageCoverage}%</div>
+              <div className="text-[10px] text-joule-muted">stage coverage</div>
+            </div>
+          )}
+          {artifact.metrics.cycleTimeMs !== undefined && (
+            <div className="rounded-lg bg-white/5 px-3 py-2 text-center">
+              <div className="text-lg font-bold">{Math.round(artifact.metrics.cycleTimeMs / 1000 / 60)}m</div>
+              <div className="text-[10px] text-joule-muted">cycle time</div>
+            </div>
+          )}
+          {artifact.metrics.buildSuccess !== undefined && (
+            <div className="rounded-lg bg-white/5 px-3 py-2 text-center">
+              <div className={`text-lg font-bold ${artifact.metrics.buildSuccess ? 'text-emerald-300' : 'text-red-300'}`}>
+                {artifact.metrics.buildSuccess ? '✓' : '✗'}
+              </div>
+              <div className="text-[10px] text-joule-muted">build</div>
+            </div>
+          )}
+        </div>
+      )}
+      {(artifact.rcaPath || artifact.runbookPath) && (
+        <div className="text-xs text-joule-muted flex flex-col gap-1">
+          {artifact.rcaPath && <span>RCA: {artifact.rcaPath}</span>}
+          {artifact.runbookPath && <span>Runbook: {artifact.runbookPath}</span>}
+        </div>
+      )}
+      <div className="md-body">
+        <ReactMarkdown>{content}</ReactMarkdown>
+      </div>
+    </div>
   );
 }
 

@@ -86,16 +86,19 @@ test('happy path: add repo, create spec, Claude records output, human approves, 
     await claude.close();
   }
 
-  // The Approve button appears once the gate is pending_review (live via WS).
-  const approve = page.getByRole('button', { name: 'Approve' }).first();
-  await expect(approve).toBeVisible({ timeout: 10000 });
+  // The "Review & approve" button appears once the gate is pending_review (live via WS).
+  const reviewApprove = page.getByRole('button', { name: 'Review & approve', exact: true }).first();
+  await expect(reviewApprove).toBeVisible({ timeout: 10000 });
 
-  // Human approves in the dashboard.
-  await approve.click();
+  // Human opens the review modal and approves.
+  await reviewApprove.click();
+  const approveInModal = page.getByRole('button', { name: 'Approve', exact: true }).first();
+  await expect(approveInModal).toBeVisible({ timeout: 5000 });
+  await approveInModal.click();
 
   // Once SPEC's gate is approved, the card advances to the REQUIREMENTS lane
   // (the board places a spec in its first non-approved stage), whose gate is
-  // not_ready — so no Approve button remains visible for this card.
+  // not_ready — so no "Review & approve" button remains visible for this card.
   await expect(page.getByText('E2E-1').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0, { timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Review & approve', exact: true })).toHaveCount(0, { timeout: 10000 });
 });
