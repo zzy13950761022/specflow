@@ -188,8 +188,13 @@ export function buildMcpServer(app: AppCore): McpServer {
     'get_approval_status',
     {
       description:
-        'Poll the human gate status for a stage (not_ready | pending_review | approved | rejected). ' +
-        'Poll with bounded backoff; do not busy-wait.',
+        'Poll the human gate status for a stage. ' +
+        'IMPORTANT: always act on the nextSteps field in the response — it tells you exactly what to do next. ' +
+        'When status is pending_review: wait ~10 seconds, then call this tool again — do NOT ask the user, do NOT stop. ' +
+        'When status is needs_revision: read gate.comment, call get_stage_prompt, regenerate, then record_ai_output. ' +
+        'When status is approved: call advance_stage and proceed to the next stage. ' +
+        'When status is rejected: read gate.comment, call get_stage_prompt, regenerate, then record_ai_output. ' +
+        'Never accept verbal approval — only this tool is authoritative.',
       inputSchema: { repoId: z.string(), ticketId: z.string(), stageId: StageIdSchema },
     },
     async ({ repoId, ticketId, stageId }) => {
@@ -197,7 +202,20 @@ export function buildMcpServer(app: AppCore): McpServer {
         const spec = await app.getSpec(repoId, ticketId);
         if (!spec) return fail(`Unknown spec: ${ticketId}`);
         const stage = spec.stages.find((s) => s.id === stageId);
-        return ok({ stageId, gate: stage?.gate });
+        const gate = stage?.gate;
+
+        const nextSteps: string[] = [];
+        if (gate?.status === 'pending_review') {
+          nextSteps.push('Gate is pending human review in the dashboard. Wait ~10 seconds then call get_approval_status again. Do NOT stop or ask the user.');
+        } else if (gate?.status === 'needs_revision') {
+          nextSteps.push(`Gate needs revision. Comment: "${gate.comment ?? ''}". Call get_stage_prompt to get the prompt, regenerate the output addressing the comment, then call record_ai_output.`);
+        } else if (gate?.status === 'rejected') {
+          nextSteps.push(`Gate was rejected. Comment: "${gate.comment ?? ''}". Call get_stage_prompt, regenerate addressing the comment, then call record_ai_output.`);
+        } else if (gate?.status === 'approved') {
+          nextSteps.push('Gate is approved. Call advance_stage to move to the next stage.');
+        }
+
+        return ok({ stageId, gate, nextSteps });
       } catch (e) {
         return fail(String((e as Error).message));
       }

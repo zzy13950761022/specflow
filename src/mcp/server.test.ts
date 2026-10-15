@@ -89,6 +89,57 @@ describe('MCP tools drive real state on disk', () => {
   });
 });
 
+describe('MCP get_approval_status nextSteps guidance', () => {
+  it('returns poll-again nextStep when pending_review', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'NS-1', title: 'x' } });
+    await client.callTool({
+      name: 'record_ai_output',
+      arguments: { repoId, ticketId: 'NS-1', stageId: 'spec', content: '# body' },
+    });
+    const res: any = await client.callTool({
+      name: 'get_approval_status',
+      arguments: { repoId, ticketId: 'NS-1', stageId: 'spec' },
+    });
+    const payload = parse(res);
+    expect(payload.gate.status).toBe('pending_review');
+    expect(payload.nextSteps).toHaveLength(1);
+    expect(payload.nextSteps[0]).toMatch(/poll|wait|get_approval_status/i);
+  });
+
+  it('returns advance nextStep when approved', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'NS-2', title: 'x' } });
+    await client.callTool({
+      name: 'record_ai_output',
+      arguments: { repoId, ticketId: 'NS-2', stageId: 'spec', content: '# body' },
+    });
+    await app.approve(repoId, 'NS-2', 'spec');
+    const res: any = await client.callTool({
+      name: 'get_approval_status',
+      arguments: { repoId, ticketId: 'NS-2', stageId: 'spec' },
+    });
+    const payload = parse(res);
+    expect(payload.gate.status).toBe('approved');
+    expect(payload.nextSteps[0]).toMatch(/advance_stage/i);
+  });
+
+  it('returns revision nextStep with comment when needs_revision', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'NS-3', title: 'x' } });
+    await client.callTool({
+      name: 'record_ai_output',
+      arguments: { repoId, ticketId: 'NS-3', stageId: 'spec', content: '# body' },
+    });
+    await app.requestRevision(repoId, 'NS-3', 'spec', 'add error handling');
+    const res: any = await client.callTool({
+      name: 'get_approval_status',
+      arguments: { repoId, ticketId: 'NS-3', stageId: 'spec' },
+    });
+    const payload = parse(res);
+    expect(payload.gate.status).toBe('needs_revision');
+    expect(payload.nextSteps[0]).toMatch(/add error handling/);
+    expect(payload.nextSteps[0]).toMatch(/record_ai_output/i);
+  });
+});
+
 describe('MCP advance_stage gating (the core guarantee)', () => {
   it('is REFUSED with GATE_NOT_APPROVED before approval', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'ABC-1', title: 'x' } });
