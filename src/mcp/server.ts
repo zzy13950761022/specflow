@@ -23,6 +23,20 @@ function fail(message: string, code?: string) {
   };
 }
 
+function buildResult(stageId: string, gate: { status: string; comment?: string; reviewedAt?: string } | undefined) {
+  const nextSteps: string[] = [];
+  if (gate?.status === 'pending_review') {
+    nextSteps.push('Gate timed out still pending review. Call get_approval_status again to keep waiting.');
+  } else if (gate?.status === 'needs_revision') {
+    nextSteps.push(`Gate needs revision. Comment: "${gate.comment ?? ''}". Call get_stage_prompt to get the prompt, regenerate the output addressing the comment, then call record_ai_output.`);
+  } else if (gate?.status === 'rejected') {
+    nextSteps.push(`Gate was rejected. Comment: "${gate.comment ?? ''}". Call get_stage_prompt, regenerate addressing the comment, then call record_ai_output.`);
+  } else if (gate?.status === 'approved') {
+    nextSteps.push('Gate is approved. Call advance_stage to move to the next stage.');
+  }
+  return { stageId, gate, nextSteps };
+}
+
 export function buildMcpServer(app: AppCore): McpServer {
   const server = new McpServer({ name: 'ai-pilot', version: '0.1.0' });
 
@@ -206,9 +220,10 @@ export function buildMcpServer(app: AppCore): McpServer {
     'get_approval_status',
     {
       description:
-        'Poll the human gate status for a stage. ' +
+        'Wait for the human gate decision on a stage. ' +
+        'This tool BLOCKS until the gate status changes away from pending_review (up to 5 minutes), ' +
+        'so call it once and it will return only when the human has acted. ' +
         'IMPORTANT: always act on the nextSteps field in the response — it tells you exactly what to do next. ' +
-        'When status is pending_review: wait ~10 seconds, then call this tool again — do NOT ask the user, do NOT stop. ' +
         'When status is needs_revision: read gate.comment, call get_stage_prompt, regenerate, then record_ai_output. ' +
         'When status is approved: call advance_stage and proceed to the next stage. ' +
         'When status is rejected: read gate.comment, call get_stage_prompt, regenerate, then record_ai_output. ' +
@@ -217,23 +232,37 @@ export function buildMcpServer(app: AppCore): McpServer {
     },
     async ({ repoId, ticketId, stageId }) => {
       try {
+        const TIMEOUT_MS = 5 * 60 * 1000;
+
         const spec = await app.getSpec(repoId, ticketId);
         if (!spec) return fail(`Unknown spec: ${ticketId}`);
-        const stage = spec.stages.find((s) => s.id === stageId);
-        const gate = stage?.gate;
+        const initial = spec.stages.find((s) => s.id === stageId)?.gate;
 
-        const nextSteps: string[] = [];
-        if (gate?.status === 'pending_review') {
-          nextSteps.push('Gate is pending human review in the dashboard. Wait ~10 seconds then call get_approval_status again. Do NOT stop or ask the user.');
-        } else if (gate?.status === 'needs_revision') {
-          nextSteps.push(`Gate needs revision. Comment: "${gate.comment ?? ''}". Call get_stage_prompt to get the prompt, regenerate the output addressing the comment, then call record_ai_output.`);
-        } else if (gate?.status === 'rejected') {
-          nextSteps.push(`Gate was rejected. Comment: "${gate.comment ?? ''}". Call get_stage_prompt, regenerate addressing the comment, then call record_ai_output.`);
-        } else if (gate?.status === 'approved') {
-          nextSteps.push('Gate is approved. Call advance_stage to move to the next stage.');
+        // If already decided, return immediately.
+        if (initial?.status !== 'pending_review') {
+          return ok(buildResult(stageId, initial));
         }
 
-        return ok({ stageId, gate, nextSteps });
+        // Block until the gate moves off pending_review or timeout.
+        const gate = await new Promise<typeof initial>((resolve) => {
+          const timer = setTimeout(() => {
+            unsub();
+            resolve(initial);
+          }, TIMEOUT_MS);
+
+          const unsub = app.events.subscribe((event) => {
+            if (event.type !== 'spec.updated') return;
+            if (event.repoId !== repoId) return;
+            if (event.spec.ticketId !== ticketId) return;
+            const stage = event.spec.stages.find((s) => s.id === stageId);
+            if (!stage || stage.gate.status === 'pending_review') return;
+            clearTimeout(timer);
+            unsub();
+            resolve(stage.gate);
+          });
+        });
+
+        return ok(buildResult(stageId, gate));
       } catch (e) {
         return fail(String((e as Error).message));
       }
