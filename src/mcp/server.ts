@@ -67,12 +67,30 @@ export function buildMcpServer(app: AppCore): McpServer {
     'create_spec',
     {
       description:
-        'Create a new 8-stage spec for a ticket. Derives specPath from the title.',
+        'Create a new 8-stage spec for a ticket. Derives specPath from the title. ' +
+        'IMPORTANT: always check the templateStatus field in the response. ' +
+        'If templateStatus is "none", call propose_repo_templates then write_repo_template ' +
+        'for all 8 stages BEFORE calling get_stage_prompt. ' +
+        'If templateStatus is "ready", proceed directly to get_stage_prompt.',
       inputSchema: { repoId: z.string(), ticketId: z.string(), title: z.string() },
     },
     async ({ repoId, ticketId, title }) => {
       try {
-        return ok(await app.createSpec(repoId, ticketId, title));
+        const spec = await app.createSpec(repoId, ticketId, title);
+        const templates = await app.listTemplates(repoId);
+        const hasRepoTemplates = templates.some(
+          (t) => t.source === 'repo-curated' || t.source === 'repo-draft'
+        );
+        const templateStatus = hasRepoTemplates ? 'ready' : 'none';
+        const nextSteps = hasRepoTemplates
+          ? ['Repo templates exist. Proceed to get_stage_prompt for the spec stage.']
+          : [
+              'No repo-specific templates found. Call propose_repo_templates to get a repo brief, ' +
+              'then call write_repo_template for each of the 8 stages (spec, requirements, design, ' +
+              'develop, test, build, deploy, ops) with content tailored to this repo. ' +
+              'Only then proceed to get_stage_prompt.',
+            ];
+        return ok({ spec, templateStatus, nextSteps });
       } catch (e) {
         return fail(String((e as Error).message));
       }

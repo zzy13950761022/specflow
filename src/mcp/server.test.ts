@@ -89,6 +89,30 @@ describe('MCP tools drive real state on disk', () => {
   });
 });
 
+describe('MCP create_spec templateStatus', () => {
+  it('returns templateStatus "none" and propose nextStep when no repo templates exist', async () => {
+    const res: any = await client.callTool({
+      name: 'create_spec',
+      arguments: { repoId, ticketId: 'TS-1', title: 'x' },
+    });
+    const payload = parse(res);
+    expect(payload.templateStatus).toBe('none');
+    expect(payload.nextSteps[0]).toMatch(/propose_repo_templates/i);
+    expect(payload.spec.ticketId).toBe('TS-1');
+  });
+
+  it('returns templateStatus "ready" when repo draft templates exist', async () => {
+    await app.writeRepoTemplate(repoId, 'spec', '# curated spec template');
+    const res: any = await client.callTool({
+      name: 'create_spec',
+      arguments: { repoId, ticketId: 'TS-2', title: 'x' },
+    });
+    const payload = parse(res);
+    expect(payload.templateStatus).toBe('ready');
+    expect(payload.nextSteps[0]).toMatch(/get_stage_prompt/i);
+  });
+});
+
 describe('MCP get_approval_status nextSteps guidance', () => {
   it('returns poll-again nextStep when pending_review', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'NS-1', title: 'x' } });
