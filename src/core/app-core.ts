@@ -137,6 +137,12 @@ export class AppCore {
     return this.persist(repoId, path, this.stageMachine.reject(spec, stageId, comment));
   }
 
+  async requestRevision(repoId: string, ticketId: string, stageId: StageId, comment: string): Promise<SpecFile> {
+    const path = await this.repoPath(repoId);
+    const spec = await this.requireSpec(path, ticketId);
+    return this.persist(repoId, path, this.stageMachine.requestRevision(spec, stageId, comment));
+  }
+
   /** Throws GateNotApprovedError if the current gate isn't approved. */
   async advance(repoId: string, ticketId: string, stageId: StageId): Promise<SpecFile> {
     const path = await this.repoPath(repoId);

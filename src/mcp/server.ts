@@ -223,6 +223,29 @@ export function buildMcpServer(app: AppCore): McpServer {
   );
 
   server.registerTool(
+    'request_revision',
+    {
+      description:
+        'Third gate verdict: ask Claude to revise the output without fully rejecting it. ' +
+        'Sets gate to needs_revision and aiStatus to in_progress so Claude can re-record. ' +
+        'advance_stage is still refused until the gate is approved.',
+      inputSchema: {
+        repoId: z.string(),
+        ticketId: z.string(),
+        stageId: StageIdSchema,
+        comment: z.string().min(1),
+      },
+    },
+    async ({ repoId, ticketId, stageId, comment }) => {
+      try {
+        return ok(await app.requestRevision(repoId, ticketId, stageId, comment));
+      } catch (e) {
+        return fail(String((e as Error).message));
+      }
+    }
+  );
+
+  server.registerTool(
     'set_develop_subtasks',
     {
       description:

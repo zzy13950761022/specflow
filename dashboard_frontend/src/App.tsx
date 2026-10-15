@@ -720,7 +720,7 @@ function GateActions({
   stageId: StageId;
   onDone?: () => void;
 }) {
-  const [rejecting, setRejecting] = useState(false);
+  const [mode, setMode] = useState<'normal' | 'rejecting' | 'revising'>('normal');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -734,27 +734,41 @@ function GateActions({
     }
   }
 
-  if (rejecting) {
+  function resetMode() {
+    setMode('normal');
+    setComment('');
+  }
+
+  if (mode === 'rejecting' || mode === 'revising') {
+    const isReject = mode === 'rejecting';
     return (
       <div className="flex flex-col gap-2">
         <input
           autoFocus
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          placeholder="Why reject?"
+          placeholder={isReject ? 'Why reject?' : 'What needs revision?'}
           className="bg-black/30 rounded-lg px-3 py-2 text-sm outline-none border border-white/10 focus:border-joule-purple"
         />
         <div className="flex gap-2">
           <button
             disabled={busy}
-            className="flex-1 rounded-lg bg-red-500/80 text-white text-sm py-2 disabled:opacity-60"
-            onClick={() => run(() => api.reject(repoId, ticketId, stageId, comment))}
+            className={`flex-1 rounded-lg text-white text-sm py-2 disabled:opacity-60 ${
+              isReject ? 'bg-red-500/80' : 'bg-orange-500/80'
+            }`}
+            onClick={() =>
+              run(() =>
+                isReject
+                  ? api.reject(repoId, ticketId, stageId, comment)
+                  : api.needsRevision(repoId, ticketId, stageId, comment)
+              )
+            }
           >
-            Confirm reject
+            {isReject ? 'Confirm reject' : 'Request revision'}
           </button>
           <button
             className="rounded-lg bg-white/10 text-sm px-3"
-            onClick={() => setRejecting(false)}
+            onClick={resetMode}
           >
             cancel
           </button>
@@ -773,8 +787,14 @@ function GateActions({
         Approve
       </button>
       <button
+        className="rounded-lg bg-orange-400/20 hover:bg-orange-400/30 text-orange-200 text-sm px-4"
+        onClick={() => setMode('revising')}
+      >
+        Revise
+      </button>
+      <button
         className="rounded-lg bg-white/10 hover:bg-white/15 text-sm px-4"
-        onClick={() => setRejecting(true)}
+        onClick={() => setMode('rejecting')}
       >
         Reject
       </button>

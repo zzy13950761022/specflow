@@ -56,6 +56,7 @@ describe('MCP server exposes the tool set', () => {
         'list_specs',
         'propose_repo_templates',
         'record_ai_output',
+        'request_revision',
         'set_develop_subtasks',
         'toggle_subtask',
         'write_repo_template',
@@ -232,5 +233,61 @@ describe('MCP set_develop_subtasks and toggle_subtask (Phase 3)', () => {
     });
     expect(res.isError).toBe(true);
     expect(parse(res).error).toMatch(/unknown subtask/i);
+  });
+});
+
+describe('MCP request_revision (needs-revision three-verdict)', () => {
+  it('sets gate to needs_revision and aiStatus to in_progress', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'NR-1', title: 'x' } });
+    await client.callTool({
+      name: 'record_ai_output',
+      arguments: { repoId, ticketId: 'NR-1', stageId: 'spec', content: '# v1' },
+    });
+    const res: any = await client.callTool({
+      name: 'request_revision',
+      arguments: { repoId, ticketId: 'NR-1', stageId: 'spec', comment: 'add error handling' },
+    });
+    expect(res.isError).toBeFalsy();
+    const spec = parse(res);
+    expect(spec.stages[0].gate.status).toBe('needs_revision');
+    expect(spec.stages[0].aiStatus).toBe('in_progress');
+    expect(spec.stages[0].gate.comment).toBe('add error handling');
+  });
+
+  it('advance_stage is still refused after needs_revision', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'NR-2', title: 'x' } });
+    await client.callTool({
+      name: 'record_ai_output',
+      arguments: { repoId, ticketId: 'NR-2', stageId: 'spec', content: '# v1' },
+    });
+    await client.callTool({
+      name: 'request_revision',
+      arguments: { repoId, ticketId: 'NR-2', stageId: 'spec', comment: 'revise' },
+    });
+    const res: any = await client.callTool({
+      name: 'advance_stage',
+      arguments: { repoId, ticketId: 'NR-2', stageId: 'spec' },
+    });
+    expect(res.isError).toBe(true);
+    expect(parse(res).code).toBe('GATE_NOT_APPROVED');
+  });
+
+  it('Claude can re-record after needs_revision to cycle back to pending_review', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'NR-3', title: 'x' } });
+    await client.callTool({
+      name: 'record_ai_output',
+      arguments: { repoId, ticketId: 'NR-3', stageId: 'spec', content: '# v1' },
+    });
+    await client.callTool({
+      name: 'request_revision',
+      arguments: { repoId, ticketId: 'NR-3', stageId: 'spec', comment: 'needs more detail' },
+    });
+    const res: any = await client.callTool({
+      name: 'record_ai_output',
+      arguments: { repoId, ticketId: 'NR-3', stageId: 'spec', content: '# v2 with detail' },
+    });
+    expect(res.isError).toBeFalsy();
+    expect(parse(res).stages[0].gate.status).toBe('pending_review');
+    expect(parse(res).stages[0].aiStatus).toBe('done');
   });
 });

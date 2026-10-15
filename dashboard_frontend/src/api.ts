@@ -55,6 +55,13 @@ export const api = {
       body: JSON.stringify({ stageId, comment }),
     }).then((r) => json<SpecFile>(r)),
 
+  needsRevision: (repoId: string, ticketId: string, stageId: StageId, comment: string) =>
+    fetch(`/api/repos/${repoId}/specs/${ticketId}/needs-revision`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stageId, comment }),
+    }).then((r) => json<SpecFile>(r)),
+
   listTemplates: (repoId: string) =>
     fetch(`/api/repos/${repoId}/templates`).then((r) => json<TemplateSummary[]>(r)),
 

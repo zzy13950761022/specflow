@@ -430,3 +430,60 @@ describe('Phase 5 — AUTO_STAGES is the single capability source', () => {
     }
   );
 });
+
+describe('StageMachine.requestRevision (needs-revision three-verdict)', () => {
+  function mkPendingSpec() {
+    const sm = new StageMachine();
+    let spec = sm.createSpec({ ticketId: 'NR-1', title: 'x' });
+    spec = sm.recordAiOutput(spec, 'spec', { kind: 'markdown', path: 'p' });
+    return { sm, spec };
+  }
+
+  it('sets gate to needs_revision', () => {
+    const { sm, spec } = mkPendingSpec();
+    const next = sm.requestRevision(spec, 'spec', 'please add acceptance criteria');
+    expect(next.stages[0].gate.status).toBe('needs_revision');
+  });
+
+  it('sets aiStatus to in_progress', () => {
+    const { sm, spec } = mkPendingSpec();
+    const next = sm.requestRevision(spec, 'spec', 'needs rework');
+    expect(next.stages[0].aiStatus).toBe('in_progress');
+  });
+
+  it('records the comment on the gate', () => {
+    const { sm, spec } = mkPendingSpec();
+    const next = sm.requestRevision(spec, 'spec', 'add error handling');
+    expect(next.stages[0].gate.comment).toBe('add error handling');
+  });
+
+  it('records the transition in gateHistory', () => {
+    const { sm, spec } = mkPendingSpec();
+    const next = sm.requestRevision(spec, 'spec', 'fix');
+    const entry = next.gateHistory.at(-1)!;
+    expect(entry.stageId).toBe('spec');
+    expect(entry.from).toBe('pending_review');
+    expect(entry.to).toBe('needs_revision');
+    expect(entry.comment).toBe('fix');
+  });
+
+  it('bumps updatedAt', () => {
+    const { sm, spec } = mkPendingSpec();
+    const next = sm.requestRevision(spec, 'spec', 'fix');
+    expect(next.updatedAt >= spec.updatedAt).toBe(true);
+  });
+
+  it('advance is still refused after needs_revision (gating invariant holds)', () => {
+    const { sm, spec } = mkPendingSpec();
+    const next = sm.requestRevision(spec, 'spec', 'fix');
+    expect(() => sm.advance(next, 'spec')).toThrow(GateNotApprovedError);
+  });
+
+  it('Claude can re-record output after needs_revision, cycling back to pending_review', () => {
+    const { sm, spec } = mkPendingSpec();
+    let next = sm.requestRevision(spec, 'spec', 'fix');
+    next = sm.recordAiOutput(next, 'spec', { kind: 'markdown', path: 'p2' });
+    expect(next.stages[0].gate.status).toBe('pending_review');
+    expect(next.stages[0].aiStatus).toBe('done');
+  });
+});

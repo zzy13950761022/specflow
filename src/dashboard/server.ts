@@ -191,6 +191,24 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
     }
   });
 
+  fastify.post<{
+    Params: { repoId: string; ticketId: string };
+    Body: { stageId?: string; comment?: string };
+  }>('/api/repos/:repoId/specs/:ticketId/needs-revision', async (req, reply) => {
+    const stage = StageIdSchema.safeParse(req.body?.stageId);
+    if (!stage.success) return reply.code(400).send({ error: 'valid stageId required' });
+    try {
+      return await app.requestRevision(
+        req.params.repoId,
+        req.params.ticketId,
+        stage.data,
+        req.body?.comment ?? ''
+      );
+    } catch (e) {
+      return reply.code(400).send({ error: String((e as Error).message) });
+    }
+  });
+
   /* ---- develop subtasks (Phase 3) ---- */
   fastify.put<{
     Params: { repoId: string; ticketId: string };

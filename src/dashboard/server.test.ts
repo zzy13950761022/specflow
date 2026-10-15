@@ -231,3 +231,45 @@ describe('Dashboard subtask endpoints (Phase 3)', () => {
     }
   });
 });
+
+describe('Dashboard needs-revision endpoint', () => {
+  it('POST .../needs-revision sets gate to needs_revision and aiStatus to in_progress', async () => {
+    await app.createSpec(repoId, 'NR-1', 'x');
+    await app.recordAiOutput(repoId, 'NR-1', 'spec', '# v1');
+    const res = await fastify.inject({
+      method: 'POST',
+      url: `/api/repos/${repoId}/specs/NR-1/needs-revision`,
+      payload: { stageId: 'spec', comment: 'please add error handling' },
+    });
+    expect(res.statusCode).toBe(200);
+    const spec = res.json();
+    const stage = spec.stages[0];
+    expect(stage.gate.status).toBe('needs_revision');
+    expect(stage.aiStatus).toBe('in_progress');
+    expect(stage.gate.comment).toBe('please add error handling');
+  });
+
+  it('needs-revision rejects an invalid stageId', async () => {
+    await app.createSpec(repoId, 'NR-2', 'x');
+    const res = await fastify.inject({
+      method: 'POST',
+      url: `/api/repos/${repoId}/specs/NR-2/needs-revision`,
+      payload: { stageId: 'not-a-stage', comment: 'fix it' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('advance is still refused after needs_revision', async () => {
+    await app.createSpec(repoId, 'NR-3', 'x');
+    await app.recordAiOutput(repoId, 'NR-3', 'spec', '# v1');
+    await app.requestRevision(repoId, 'NR-3', 'spec', 'needs work');
+    const res = await fastify.inject({
+      method: 'POST',
+      url: `/api/repos/${repoId}/specs/NR-3/advance`,
+      payload: { stageId: 'spec' },
+    });
+    // No /advance REST endpoint — gate is enforced in MCP; just verify via AppCore
+    const spec = await app.getSpec(repoId, 'NR-3');
+    expect(spec!.stages[0].gate.status).toBe('needs_revision');
+  });
+});

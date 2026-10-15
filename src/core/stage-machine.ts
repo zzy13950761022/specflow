@@ -103,6 +103,20 @@ export class StageMachine {
     });
   }
 
+  /**
+   * Third verdict: the reviewer wants changes but considers this a minor
+   * revision rather than an outright rejection. aiStatus → in_progress so
+   * Claude can re-record; gate → needs_revision (advance still refused).
+   */
+  requestRevision(spec: SpecFile, stageId: StageId, comment: string): SpecFile {
+    return this.mutateStage(spec, stageId, (next, stage) => {
+      stage.gate.comment = comment;
+      stage.gate.reviewedAt = now();
+      stage.aiStatus = 'in_progress';
+      this.transitionGate(next, stage, 'needs_revision');
+    });
+  }
+
   /** Throws GateNotApprovedError if the current gate isn't approved. */
   advance(spec: SpecFile, stageId: StageId): SpecFile {
     const stage = this.stage(spec, stageId);
