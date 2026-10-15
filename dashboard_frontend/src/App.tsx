@@ -51,7 +51,7 @@ export function App() {
   }, [activeRepo, refreshRepos, refreshSpecs]);
 
   return (
-    <div className="min-h-full flex flex-col">
+    <div className="h-screen w-screen flex flex-col overflow-hidden">
       <Header />
       <div className="flex-1 flex gap-4 p-4 overflow-hidden">
         <Sidebar
