@@ -53,6 +53,13 @@ export function App() {
     });
   }, [activeRepo, refreshRepos, refreshSpecs]);
 
+  // Fallback polling: re-fetch every 5s to catch any missed WS events.
+  useEffect(() => {
+    if (!activeRepo) return;
+    const id = setInterval(() => refreshSpecs(activeRepo), 5000);
+    return () => clearInterval(id);
+  }, [activeRepo, refreshSpecs]);
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <Header />
