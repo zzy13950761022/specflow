@@ -7,3 +7,4 @@ dashboard_frontend/dist/
 test-results/
 playwright-report/
 .idea/
+docs/
