@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { StageMachine, GateNotApprovedError } from './stage-machine.js';
+import { StageMachine, GateNotApprovedError, AUTO_STAGES } from './stage-machine.js';
 import { STAGE_IDS, GateStatusSchema } from './schemas.js';
 
 describe('GateStatusSchema (hook A: reserved needs_revision)', () => {
@@ -21,14 +21,12 @@ describe('StageMachine.createSpec', () => {
     expect(spec.specPath).toBe('specs/ABC-123-checkout-tax.md');
   });
 
-  it('marks stages 0 & 1 auto and 2-7 stubbed', () => {
+  it('marks all 8 stages auto (Phase 5)', () => {
     const sm = new StageMachine();
     const spec = sm.createSpec({ ticketId: 'ABC-1', title: 'x' });
-    expect(spec.stages[0].aiCapability).toBe('auto'); // spec
-    expect(spec.stages[1].aiCapability).toBe('auto'); // requirements
-    for (let i = 2; i < 8; i++) {
-      expect(spec.stages[i].aiCapability).toBe('stub');
-      expect(spec.stages[i].aiStatus).toBe('stubbed');
+    for (const stage of spec.stages) {
+      expect(stage.aiCapability).toBe('auto');
+      expect(stage.aiStatus).toBe('not_started');
     }
   });
 
@@ -303,27 +301,21 @@ describe('StageMachine subtask methods (Phase 3)', () => {
     it('aiStatus stays stubbed when subtasks are empty', () => {
       const sm = new StageMachine();
       const spec = sm.setSubtasks(mkSpec(), []);
-      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('stubbed');
+      // Phase 5: develop is now auto, so aiStatus stays not_started (no tasks to derive from).
+      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('not_started');
     });
 
     it('aiStatus is in_progress when subtasks exist but none completed', () => {
       const sm = new StageMachine();
-      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }, { description: 'T2' }]);
-      // Manually open the stage so it's not stubbed (simulate being reached)
-      const develop = spec.stages.find((s) => s.id === 'develop')!;
-      develop.aiCapability = 'auto';
-      develop.aiStatus = 'not_started';
-      spec = sm.setSubtasks(spec, [{ description: 'T1' }, { description: 'T2' }]);
+      // Phase 5: develop is auto from createSpec, no need to manually set aiCapability.
+      const spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }, { description: 'T2' }]);
       expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('in_progress');
     });
 
     it('aiStatus becomes done only when ALL subtasks are checked', () => {
       const sm = new StageMachine();
+      // Phase 5: develop is auto from createSpec.
       let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }, { description: 'T2' }]);
-      const develop = spec.stages.find((s) => s.id === 'develop')!;
-      develop.aiCapability = 'auto';
-      develop.aiStatus = 'not_started';
-      spec = sm.setSubtasks(spec, [{ description: 'T1' }, { description: 'T2' }]);
 
       const ids = spec.stages.find((s) => s.id === 'develop')!.subtasks!.map((t) => t.id);
       spec = sm.toggleSubtask(spec, ids[0]);
@@ -335,11 +327,8 @@ describe('StageMachine subtask methods (Phase 3)', () => {
 
     it('un-checking a task reverts aiStatus from done back to in_progress', () => {
       const sm = new StageMachine();
+      // Phase 5: develop is auto from createSpec, no need to manually set aiCapability.
       let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
-      const develop = spec.stages.find((s) => s.id === 'develop')!;
-      develop.aiCapability = 'auto';
-      develop.aiStatus = 'not_started';
-      spec = sm.setSubtasks(spec, [{ description: 'T1' }]);
 
       const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
       spec = sm.toggleSubtask(spec, id); // done
@@ -349,11 +338,8 @@ describe('StageMachine subtask methods (Phase 3)', () => {
 
     it('gate rule unchanged: DEVELOP gate still needs human approval to advance', () => {
       const sm = new StageMachine();
+      // Phase 5: develop is auto from createSpec, no need to manually set aiCapability.
       let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
-      const develop = spec.stages.find((s) => s.id === 'develop')!;
-      develop.aiCapability = 'auto';
-      develop.aiStatus = 'not_started';
-      spec = sm.setSubtasks(spec, [{ description: 'T1' }]);
 
       const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
       spec = sm.toggleSubtask(spec, id);
@@ -362,4 +348,85 @@ describe('StageMachine subtask methods (Phase 3)', () => {
       expect(() => sm.advance(spec, 'develop')).toThrow(GateNotApprovedError);
     });
   });
+});
+
+describe('Phase 5 — AUTO_STAGES is the single capability source', () => {
+  it('exports AUTO_STAGES as a ReadonlySet', () => {
+    expect(AUTO_STAGES).toBeInstanceOf(Set);
+    expect(typeof AUTO_STAGES.has).toBe('function');
+  });
+
+  it('AUTO_STAGES contains all 8 stage ids (Phase 5 lights them all up)', () => {
+    for (const id of STAGE_IDS) {
+      expect(AUTO_STAGES.has(id)).toBe(true);
+    }
+  });
+
+  it('createSpec gives every stage aiCapability auto', () => {
+    const sm = new StageMachine();
+    const spec = sm.createSpec({ ticketId: 'P5-1', title: 'Phase 5 test' });
+    for (const stage of spec.stages) {
+      expect(stage.aiCapability).toBe('auto');
+    }
+  });
+
+  it('createSpec opens every stage with aiStatus not_started (no stubbed)', () => {
+    const sm = new StageMachine();
+    const spec = sm.createSpec({ ticketId: 'P5-1', title: 'Phase 5 test' });
+    // First stage opens immediately; rest stay not_started until advanced into.
+    for (const stage of spec.stages) {
+      // Gate is not_ready for all except stage 0 which is opened by createSpec.
+      expect(stage.aiStatus).toBe('not_started');
+    }
+  });
+
+  it.each(['design', 'develop', 'test', 'build', 'deploy', 'ops'] as const)(
+    '%s stage: record_ai_output transitions gate to pending_review and marks aiStatus done',
+    (stageId) => {
+      const sm = new StageMachine();
+      let spec = sm.createSpec({ ticketId: 'P5-1', title: 'x' });
+      const artifact =
+        stageId === 'deploy'
+          ? ({
+              kind: 'deploy-checklist' as const,
+              path: `p/${stageId}.md`,
+              items: [{ id: 'i1', description: 'Deploy step', checked: false, governanceFlag: 'none' as const }],
+              status: 'pending' as const,
+            } as const)
+          : stageId === 'ops'
+          ? ({ kind: 'ops-report' as const, path: `p/${stageId}.md`, logsSanitized: true } as const)
+          : ({ kind: 'markdown' as const, path: `p/${stageId}.md` } as const);
+      spec = sm.recordAiOutput(spec, stageId, artifact);
+      const stage = spec.stages.find((s) => s.id === stageId)!;
+      expect(stage.aiStatus).toBe('done');
+      expect(stage.gate.status).toBe('pending_review');
+    }
+  );
+
+  it.each(['design', 'develop', 'test', 'build', 'deploy', 'ops'] as const)(
+    '%s stage: advance is still blocked until gate is approved',
+    (stageId) => {
+      const sm = new StageMachine();
+      let spec = sm.createSpec({ ticketId: 'P5-1', title: 'x' });
+      const artifact =
+        stageId === 'deploy'
+          ? ({
+              kind: 'deploy-checklist' as const,
+              path: `p/${stageId}.md`,
+              items: [],
+              status: 'pending' as const,
+            } as const)
+          : stageId === 'ops'
+          ? ({ kind: 'ops-report' as const, path: `p/${stageId}.md`, logsSanitized: true } as const)
+          : ({ kind: 'markdown' as const, path: `p/${stageId}.md` } as const);
+      spec = sm.recordAiOutput(spec, stageId, artifact);
+      // Gate is now pending_review — advance must be refused.
+      expect(() => sm.advance(spec, stageId)).toThrow(GateNotApprovedError);
+      // After approval, advance succeeds.
+      spec = sm.approve(spec, stageId);
+      if (stageId !== 'ops') {
+        expect(() => sm.advance(spec, stageId)).not.toThrow();
+      }
+    }
+  );
 });

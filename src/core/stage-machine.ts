@@ -19,8 +19,13 @@ export class GateNotApprovedError extends Error {
   }
 }
 
-/** v1 automation map: only spec + requirements are really wired. */
-const AUTO_STAGES: ReadonlySet<StageId> = new Set<StageId>(['spec', 'requirements']);
+/**
+ * Single source of truth for which stages run real AI automation.
+ * Phase 5 flips all 8 stages to auto. The set is exported so tests can
+ * assert the mapping and callers can read it without depending on the
+ * StageMachine constructor.
+ */
+export const AUTO_STAGES: ReadonlySet<StageId> = new Set<StageId>([...STAGE_IDS]);
 
 function slugify(title: string): string {
   return title

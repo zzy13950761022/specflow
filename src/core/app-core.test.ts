@@ -185,16 +185,11 @@ describe('AppCore subtask management (Phase 3)', () => {
 
   it('aiStatus becomes done when all subtasks are toggled on', async () => {
     await app.createSpec(repoId, 'TASK-1', 'Feature');
-    // Simulate develop stage being opened (auto capability) by toggling via a
-    // helper that sets up the fixture with a direct mutation we approve via
-    // the gate pathway from spec → requirements → design → develop.
-    // For unit brevity: just create with subtasks and verify the stubbed-path
-    // doesn't produce 'done', then verify the in-progress derived path separately.
+    // Phase 5: develop is now auto, so toggling the only subtask to completed makes aiStatus 'done'.
     let spec = await app.setDevelopSubtasks(repoId, 'TASK-1', [{ description: 'Only one' }]);
-    // When capability is stub, aiStatus should stay 'stubbed' even if all tasks done
     const id = spec!.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
     spec = await app.toggleSubtask(repoId, 'TASK-1', id);
-    // With stub capability: aiStatus stays stubbed (gate semantics unchanged)
-    expect(spec!.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('stubbed');
+    // Phase 5: all stages are auto, so aiStatus derives to 'done' when all tasks completed.
+    expect(spec!.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('done');
   });
 });
