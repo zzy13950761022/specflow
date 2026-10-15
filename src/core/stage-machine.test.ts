@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { StageMachine, GateNotApprovedError } from './stage-machine.js';
-import { STAGE_IDS } from './schemas.js';
+import { STAGE_IDS, GateStatusSchema } from './schemas.js';
+
+describe('GateStatusSchema (hook A: reserved needs_revision)', () => {
+  it('accepts the reserved needs_revision value', () => {
+    expect(GateStatusSchema.parse('needs_revision')).toBe('needs_revision');
+  });
+});
 
 describe('StageMachine.createSpec', () => {
   it('creates all 8 stages in fixed order', () => {

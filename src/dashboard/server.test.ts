@@ -83,6 +83,35 @@ describe('Dashboard REST', () => {
     expect(res.json().stages[0].gate.comment).toBe('needs detail');
   });
 
+  it('GET artifact returns the recorded stage content', async () => {
+    await app.createSpec(repoId, 'ABC-1', 'x');
+    await app.recordAiOutput(repoId, 'ABC-1', 'spec', '# generated spec body');
+    const res = await fastify.inject({
+      method: 'GET',
+      url: `/api/repos/${repoId}/specs/ABC-1/artifact?stageId=spec`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ stageId: 'spec', content: '# generated spec body' });
+  });
+
+  it('GET artifact 400s on a missing/invalid stageId', async () => {
+    await app.createSpec(repoId, 'ABC-1', 'x');
+    const res = await fastify.inject({
+      method: 'GET',
+      url: `/api/repos/${repoId}/specs/ABC-1/artifact?stageId=nope`,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('GET artifact 404s when the stage has no artifact yet', async () => {
+    await app.createSpec(repoId, 'ABC-1', 'x');
+    const res = await fastify.inject({
+      method: 'GET',
+      url: `/api/repos/${repoId}/specs/ABC-1/artifact?stageId=design`,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
   it('approve rejects an invalid stageId', async () => {
     await app.createSpec(repoId, 'ABC-1', 'x');
     const res = await fastify.inject({

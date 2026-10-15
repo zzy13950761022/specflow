@@ -42,3 +42,91 @@ body {
 .joule-glow {
   box-shadow: 0 0 24px rgba(120, 88, 255, 0.45);
 }
+
+/* Markdown rendering inside the review modal. Scoped so it never leaks into
+   the board chrome. Tuned for the dark glass background. */
+.md-body {
+  color: var(--color-joule-ink);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+.md-body > :first-child {
+  margin-top: 0;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.4em 0 0.6em;
+}
+.md-body h1 {
+  font-size: 1.5rem;
+}
+.md-body h2 {
+  font-size: 1.25rem;
+}
+.md-body h3 {
+  font-size: 1.1rem;
+}
+.md-body p {
+  margin: 0.7em 0;
+}
+.md-body ul,
+.md-body ol {
+  margin: 0.7em 0;
+  padding-left: 1.5em;
+}
+.md-body li {
+  margin: 0.3em 0;
+}
+.md-body ul {
+  list-style: disc;
+}
+.md-body ol {
+  list-style: decimal;
+}
+.md-body a {
+  color: var(--color-joule-blue);
+  text-decoration: underline;
+}
+.md-body code {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.85em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.md-body pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.9em 1em;
+  overflow-x: auto;
+  margin: 0.9em 0;
+}
+.md-body pre code {
+  background: transparent;
+  padding: 0;
+}
+.md-body blockquote {
+  border-left: 3px solid var(--color-joule-purple);
+  margin: 0.9em 0;
+  padding-left: 1em;
+  color: var(--color-joule-muted);
+}
+.md-body hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin: 1.4em 0;
+}
+.md-body table {
+  border-collapse: collapse;
+  margin: 0.9em 0;
+}
+.md-body th,
+.md-body td {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.4em 0.7em;
+}

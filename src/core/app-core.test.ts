@@ -92,6 +92,36 @@ describe('AppCore prompt rendering with upstream context', () => {
   });
 });
 
+describe('AppCore readArtifact (review-before-approve)', () => {
+  it('returns the recorded artifact content for a stage', async () => {
+    await app.createSpec(repoId, 'ABC-1', 'Checkout Tax');
+    await app.recordAiOutput(repoId, 'ABC-1', 'spec', '# The spec body\n\nDetails here.');
+    const content = await app.readArtifact(repoId, 'ABC-1', 'spec');
+    expect(content).toBe('# The spec body\n\nDetails here.');
+  });
+
+  it('returns null for a stage with no artifact yet', async () => {
+    await app.createSpec(repoId, 'ABC-1', 'x');
+    expect(await app.readArtifact(repoId, 'ABC-1', 'design')).toBeNull();
+  });
+
+  it('throws for an unknown spec', async () => {
+    await expect(app.readArtifact(repoId, 'NOPE-1', 'spec')).rejects.toThrow(/unknown spec/i);
+  });
+});
+
+describe('AppCore artifactHistory snapshot (hook B)', () => {
+  it('appends a {path, at} history entry on each record, and the file exists', async () => {
+    await app.createSpec(repoId, 'ABC-1', 'x');
+    const spec = await app.recordAiOutput(repoId, 'ABC-1', 'spec', '# v1');
+    const stage = spec.stages[0];
+    expect(stage.artifactHistory).toHaveLength(1);
+    expect(stage.artifactHistory![0].at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const snapshot = await fs.readFile(join(repo, stage.artifactHistory![0].path), 'utf-8');
+    expect(snapshot).toBe('# v1');
+  });
+});
+
 describe('AppCore repo lifecycle', () => {
   it('removing a repo never deletes repo files', async () => {
     await app.createSpec(repoId, 'ABC-1', 'x');

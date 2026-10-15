@@ -76,24 +76,42 @@ export class SpecStore {
     });
   }
 
-  /** Write a later-stage AI artifact and return its repo-relative path. */
+  /**
+   * Write a stage's AI artifact plus a timestamped history copy. Returns the
+   * canonical repo-relative path and the history entry (path + timestamp).
+   */
   async writeArtifact(
     repoPath: string,
     ticketId: string,
     stageId: StageId,
     stageIndex: number,
     content: string
-  ): Promise<string> {
+  ): Promise<{ path: string; history: { path: string; at: string } }> {
     const rel =
       stageId === 'spec'
         ? // Stage 0 product is the canonical human spec, lives in specs/.
           join('specs', `${ticketId}.md`)
         : join('.specflow', 'artifacts', ticketId, `${stageIndex}-${stageId}.md`);
-    const abs = join(repoPath, rel);
+    await this.atomicWrite(join(repoPath, rel), content);
+
+    const at = new Date().toISOString();
+    const historyRel = join(
+      '.specflow',
+      'artifacts',
+      ticketId,
+      'history',
+      `${stageId}-${at.replace(/[:.]/g, '-')}.md`
+    );
+    await this.atomicWrite(join(repoPath, historyRel), content);
+
+    return { path: rel, history: { path: historyRel, at } };
+  }
+
+  /** Atomic file write (temp + rename), creating parent dirs as needed. */
+  private async atomicWrite(abs: string, content: string): Promise<void> {
     await fs.mkdir(dirname(abs), { recursive: true });
     const tmp = `${abs}.${process.pid}.${Date.now()}.tmp`;
     await fs.writeFile(tmp, content, 'utf-8');
     await fs.rename(tmp, abs);
-    return rel;
   }
 }

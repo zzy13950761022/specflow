@@ -39,6 +39,10 @@ export const GateStatusSchema = z.enum([
   'pending_review',
   'approved',
   'rejected',
+  // Reserved for a future three-verdict review (approve / reject / needs-revision).
+  // No transition writes this value yet; declared now so the schema needs no
+  // migration when that feature lands.
+  'needs_revision',
 ]);
 export type GateStatus = z.infer<typeof GateStatusSchema>;
 
@@ -71,6 +75,11 @@ export const StageSchema = z.object({
   aiCapability: AiCapabilitySchema,
   gate: GateSchema,
   artifactPath: z.string().optional(),
+  // Timestamped copies of every AI output recorded for this stage, oldest first.
+  // Feeds a future snapshot/diff view; writing is cheap, querying comes later.
+  artifactHistory: z
+    .array(z.object({ path: z.string(), at: z.string() }))
+    .optional(),
   /** Only meaningful for the 'develop' stage; placeholder in v1. */
   subtasks: z.array(SubtaskSchema).optional(),
 });

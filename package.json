@@ -27,6 +27,7 @@
     "@modelcontextprotocol/sdk": "^1.24.3",
     "chokidar": "^3.5.3",
     "fastify": "^5.8.5",
+    "react-markdown": "^10.1.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

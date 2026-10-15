@@ -112,14 +112,14 @@ export class AppCore {
     const path = await this.repoPath(repoId);
     const spec = await this.requireSpec(path, ticketId);
     const stageIndex = STAGE_IDS.indexOf(stageId);
-    const artifactPath = await this.store.writeArtifact(
+    const { path: artifactPath, history } = await this.store.writeArtifact(
       path,
       ticketId,
       stageId,
       stageIndex,
       content
     );
-    const next = this.stageMachine.recordAiOutput(spec, stageId, artifactPath);
+    const next = this.stageMachine.recordAiOutput(spec, stageId, artifactPath, history);
     return this.persist(repoId, path, next);
   }
 
@@ -160,6 +160,28 @@ export class AppCore {
     const path = await this.repoPath(repoId);
     const spec = await this.requireSpec(path, ticketId);
     return this.persist(repoId, path, this.stageMachine.toggleSubtask(spec, subtaskId));
+  }
+
+  /* ---- artifact content ---- */
+
+  /** Read a stage's own AI artifact content, or null if none/unreadable. */
+  async readArtifact(
+    repoId: string,
+    ticketId: string,
+    stageId: StageId
+  ): Promise<string | null> {
+    const path = await this.repoPath(repoId);
+    const spec = await this.requireSpec(path, ticketId);
+    const stage = spec.stages.find((s) => s.id === stageId);
+    if (!stage?.artifactPath) return null;
+    try {
+      const { readFile } = await import('fs/promises');
+      const { join } = await import('path');
+      return await readFile(join(path, stage.artifactPath), 'utf-8');
+    } catch (err) {
+      logger.warn('Could not read artifact', stage.artifactPath, String(err));
+      return null;
+    }
   }
 
   /* ---- internals ---- */

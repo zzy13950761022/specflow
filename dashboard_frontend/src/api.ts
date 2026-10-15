@@ -58,6 +58,12 @@ export const api = {
   listTemplates: (repoId: string) =>
     fetch(`/api/repos/${repoId}/templates`).then((r) => json<TemplateSummary[]>(r)),
 
+  /** Fetch a stage's AI-generated artifact content for review before approving. */
+  getArtifact: (repoId: string, ticketId: string, stageId: StageId) =>
+    fetch(`/api/repos/${repoId}/specs/${ticketId}/artifact?stageId=${stageId}`).then((r) =>
+      json<{ stageId: StageId; content: string }>(r)
+    ),
+
   markTemplateCurated: (repoId: string, stageId: StageId) =>
     fetch(`/api/repos/${repoId}/templates/${stageId}/curate`, {
       method: 'POST',

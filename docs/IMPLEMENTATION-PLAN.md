@@ -248,12 +248,42 @@ advance until approved.
 
 - **Config/port handling** — `--help`, port-in-use detection, `AI_PILOT_HOME`
   documented. (Partially present in `index.ts`.)
-- **Dashboard: gate history & artifact viewer** — show `gateHistory` and let a
-  reviewer read the artifact inline before approving.
+- **Dashboard: gate history** — show `gateHistory` inline on the card. (Artifact
+  **viewer** half is DONE: `GET .../artifact?stageId=` + the SpecCard "View
+  generated content" expander let a reviewer read the AI output before approving.)
 - **Metrics** — the blueprint tracks stage coverage, cycle time, build success.
   A later phase could surface these per repo.
 - **`.mcp.json.example` per-repo onboarding doc** — expand into a short
   "add AI Pilot to your repo" guide.
+
+### Review-experience enhancements (mimic spec-workflow-mcp, deferred from the artifact-viewer work)
+
+The artifact-review feature shipped a deliberately minimal v1 (plain-text preview,
+binary Approve/Reject). These four build on it, ordered by effort. Two low-cost
+hooks were pre-wired so these need no schema migration / lose no history:
+- **Hook A** — `GateStatusSchema` (`src/core/schemas.ts`) already carries a reserved
+  `needs_revision` value; no transition writes it yet. `GATE_STYLES` (App.tsx) has
+  its style key.
+- **Hook B** — every `recordAiOutput` already writes a timestamped snapshot under
+  `.specflow/artifacts/{TICKET}/history/` and appends `{path, at}` to
+  `stage.artifactHistory` (`src/core/spec-store.ts` + `stage-machine.ts`).
+
+- **Markdown rich rendering** (🟢 small) — swap the preview `<pre>` in
+  `ArtifactPreview` (App.tsx) for `react-markdown`. Pure presentation, no data
+  change, no backend touch.
+- **Three-verdict review `needs-revision`** (🟡 medium) — Hook A already reserves
+  the enum. Add a StageMachine transition (`aiStatus` → `in_progress`, keep the
+  comment to feed the next prompt), a third gate action in the dashboard + the
+  reject-style comment input, and wire an MCP/REST action. Keep the gating
+  invariant: `advance` still only on `approved`.
+- **Snapshot + diff viewer** (🟠 medium-large) — Hook B already captures history.
+  Add a `GET .../artifact/history` endpoint and a diff UI (unified/split) comparing
+  two snapshots (or snapshot vs. current). Pure additive once history data exists.
+- **Inline annotations / selection highlight** (🔴 large, purely additive) — select
+  text in the preview → record character offsets → store an annotations array on
+  the stage/artifact → re-highlight on reload. Use the raw-text (not markdown-
+  rendered) view for anchoring to avoid DOM-offset drift (the reason
+  spec-workflow-mcp's annotate mode uses plain text).
 
 ---
 

@@ -64,10 +64,18 @@ export class StageMachine {
     };
   }
 
-  recordAiOutput(spec: SpecFile, stageId: StageId, artifactPath: string): SpecFile {
+  recordAiOutput(
+    spec: SpecFile,
+    stageId: StageId,
+    artifactPath: string,
+    historyEntry?: { path: string; at: string }
+  ): SpecFile {
     return this.mutateStage(spec, stageId, (next, stage) => {
       stage.aiStatus = 'done';
       stage.artifactPath = artifactPath;
+      if (historyEntry) {
+        stage.artifactHistory = [...(stage.artifactHistory ?? []), historyEntry];
+      }
       this.transitionGate(next, stage, 'pending_review');
     });
   }

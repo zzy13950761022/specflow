@@ -79,7 +79,7 @@ describe('SpecStore concurrency', () => {
 describe('SpecStore.writeArtifact', () => {
   it('writes the stage-0 product to specs/{TICKET}.md', async () => {
     const store = new SpecStore();
-    const rel = await store.writeArtifact(repo, 'ABC-1', 'spec', 0, '# Spec');
+    const { path: rel } = await store.writeArtifact(repo, 'ABC-1', 'spec', 0, '# Spec');
     expect(rel).toBe(join('specs', 'ABC-1.md'));
     const content = await fs.readFile(join(repo, rel), 'utf-8');
     expect(content).toBe('# Spec');
@@ -87,7 +87,16 @@ describe('SpecStore.writeArtifact', () => {
 
   it('writes later-stage products under .specflow/artifacts', async () => {
     const store = new SpecStore();
-    const rel = await store.writeArtifact(repo, 'ABC-1', 'requirements', 1, '# Reqs');
+    const { path: rel } = await store.writeArtifact(repo, 'ABC-1', 'requirements', 1, '# Reqs');
     expect(rel).toBe(join('.specflow', 'artifacts', 'ABC-1', '1-requirements.md'));
+  });
+
+  it('also writes a timestamped history copy and returns its entry', async () => {
+    const store = new SpecStore();
+    const { history } = await store.writeArtifact(repo, 'ABC-1', 'spec', 0, '# Spec');
+    expect(history.path).toContain(join('.specflow', 'artifacts', 'ABC-1', 'history'));
+    expect(history.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const snapshot = await fs.readFile(join(repo, history.path), 'utf-8');
+    expect(snapshot).toBe('# Spec');
   });
 });

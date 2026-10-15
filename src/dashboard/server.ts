@@ -98,6 +98,24 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
     }
   );
 
+  // Return a stage's AI-generated artifact content so a reviewer can read it
+  // before approving/rejecting. Mirrors spec-workflow-mcp's approach of storing
+  // a path and fetching content separately.
+  fastify.get<{
+    Params: { repoId: string; ticketId: string };
+    Querystring: { stageId?: string };
+  }>('/api/repos/:repoId/specs/:ticketId/artifact', async (req, reply) => {
+    const stage = StageIdSchema.safeParse(req.query.stageId);
+    if (!stage.success) return reply.code(400).send({ error: 'valid stageId required' });
+    try {
+      const content = await app.readArtifact(req.params.repoId, req.params.ticketId, stage.data);
+      if (content === null) return reply.code(404).send({ error: 'no artifact for this stage' });
+      return { stageId: stage.data, content };
+    } catch (e) {
+      return reply.code(404).send({ error: String((e as Error).message) });
+    }
+  });
+
   fastify.post<{ Params: { repoId: string }; Body: { ticketId?: string; title?: string } }>(
     '/api/repos/:repoId/specs',
     async (req, reply) => {

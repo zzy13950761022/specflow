@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import ReactMarkdown from 'react-markdown';
 import { api, connectWs } from './api';
 import {
   STAGE_IDS,
@@ -322,12 +324,14 @@ const GATE_STYLES: Record<string, string> = {
   pending_review: 'bg-amber-400/20 text-amber-200',
   approved: 'bg-emerald-400/20 text-emerald-200',
   rejected: 'bg-red-400/20 text-red-200',
+  needs_revision: 'bg-orange-400/20 text-orange-200',
 };
 
 function SpecCard({ repoId, spec, stageId }: { repoId: string; spec: SpecFile; stageId: StageId }) {
   const stage = spec.stages.find((s) => s.id === stageId)!;
   const approvedCount = spec.stages.filter((s) => s.gate.status === 'approved').length;
   const pct = Math.round((approvedCount / spec.stages.length) * 100);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   return (
     <div className="rounded-xl bg-white/5 border border-white/10 p-3 flex flex-col gap-2">
@@ -357,7 +361,23 @@ function SpecCard({ repoId, spec, stageId }: { repoId: string; spec: SpecFile; s
       )}
 
       {stage.gate.status === 'pending_review' && (
-        <GateActions repoId={repoId} ticketId={spec.ticketId} stageId={stageId} />
+        <>
+          <button
+            onClick={() => setReviewOpen(true)}
+            className="rounded-lg joule-gradient text-white text-xs py-1.5 font-medium"
+          >
+            Review &amp; approve
+          </button>
+          {reviewOpen && (
+            <ReviewModal
+              repoId={repoId}
+              ticketId={spec.ticketId}
+              title={spec.title}
+              stageId={stageId}
+              onClose={() => setReviewOpen(false)}
+            />
+          )}
+        </>
       )}
       {stage.gate.status === 'rejected' && stage.gate.comment && (
         <p className="text-[11px] text-red-200/80 italic">"{stage.gate.comment}"</p>
@@ -473,37 +493,134 @@ function StatusDot({ stage }: { stage: Stage }) {
   return <span className={`w-2.5 h-2.5 rounded-full ${color}`} title={stage.aiStatus} />;
 }
 
+function ReviewModal({
+  repoId,
+  ticketId,
+  title,
+  stageId,
+  onClose,
+}: {
+  repoId: string;
+  ticketId: string;
+  title: string;
+  stageId: StageId;
+  onClose: () => void;
+}) {
+  const [content, setContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .getArtifact(repoId, ticketId, stageId)
+      .then((res) => alive && setContent(res.content))
+      .catch((e) => alive && setErr(String((e as Error).message)))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [repoId, ticketId, stageId]);
+
+  // Esc closes the modal.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm grid place-items-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="glass rounded-2xl w-[80vw] max-w-3xl max-h-[85vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-white/10 shrink-0">
+          <span className="font-semibold text-sm">{ticketId}</span>
+          <span className="text-[11px] rounded-full bg-white/10 px-2 py-0.5 text-joule-muted">
+            {STAGE_LABELS[stageId]}
+          </span>
+          <span className="text-xs text-joule-muted truncate" title={title}>
+            {title}
+          </span>
+          <button
+            onClick={onClose}
+            className="ml-auto text-joule-muted hover:text-joule-ink text-lg leading-none"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto px-6 py-5">
+          {loading && <p className="text-sm text-joule-muted">Loading…</p>}
+          {err && <p className="text-sm text-red-300">{err}</p>}
+          {!loading && !err && content !== null && (
+            <div className="md-body">
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-white/10 px-5 py-3 shrink-0">
+          <GateActions repoId={repoId} ticketId={ticketId} stageId={stageId} onDone={onClose} />
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function GateActions({
   repoId,
   ticketId,
   stageId,
+  onDone,
 }: {
   repoId: string;
   ticketId: string;
   stageId: StageId;
+  onDone?: () => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    try {
+      await action();
+      onDone?.();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (rejecting) {
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         <input
           autoFocus
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           placeholder="Why reject?"
-          className="bg-black/30 rounded-lg px-2 py-1 text-xs outline-none border border-white/10"
+          className="bg-black/30 rounded-lg px-3 py-2 text-sm outline-none border border-white/10 focus:border-joule-purple"
         />
-        <div className="flex gap-1.5">
+        <div className="flex gap-2">
           <button
-            className="flex-1 rounded-lg bg-red-500/80 text-white text-xs py-1"
-            onClick={() => api.reject(repoId, ticketId, stageId, comment)}
+            disabled={busy}
+            className="flex-1 rounded-lg bg-red-500/80 text-white text-sm py-2 disabled:opacity-60"
+            onClick={() => run(() => api.reject(repoId, ticketId, stageId, comment))}
           >
             Confirm reject
           </button>
           <button
-            className="rounded-lg bg-white/10 text-xs px-2"
+            className="rounded-lg bg-white/10 text-sm px-3"
             onClick={() => setRejecting(false)}
           >
             cancel
@@ -514,15 +631,16 @@ function GateActions({
   }
 
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-2">
       <button
-        className="flex-1 rounded-lg joule-gradient text-white text-xs py-1 font-medium"
-        onClick={() => api.approve(repoId, ticketId, stageId)}
+        disabled={busy}
+        className="flex-1 rounded-lg joule-gradient text-white text-sm py-2 font-medium disabled:opacity-60"
+        onClick={() => run(() => api.approve(repoId, ticketId, stageId))}
       >
         Approve
       </button>
       <button
-        className="rounded-lg bg-white/10 hover:bg-white/15 text-xs px-3"
+        className="rounded-lg bg-white/10 hover:bg-white/15 text-sm px-4"
         onClick={() => setRejecting(true)}
       >
         Reject
