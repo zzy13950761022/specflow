@@ -1,11 +1,14 @@
 {
-  "name": "ai-pilot",
+  "name": "@zzf1sh/specflow-ai",
   "version": "0.1.0",
-  "description": "Local visual platform for an 8-stage AI-assisted development workflow (SPEC -> OPS), driven by Claude Code over MCP",
+  "description": "8-stage AI-assisted development workflow platform — Claude Code MCP server + local approval dashboard (SPEC → REQUIREMENTS → DESIGN → DEVELOP → TEST → BUILD → DEPLOY → OPS)",
   "type": "module",
   "bin": {
-    "ai-pilot": "dist/index.js"
+    "specflow-ai": "dist/index.js"
   },
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "build": "npm run clean && tsc && npm run build:dashboard",
     "build:dashboard": "vite build --config dashboard_frontend/vite.config.ts && node scripts/copy-dashboard.mjs",
