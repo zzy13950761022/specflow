@@ -209,6 +209,21 @@ export class AppCore {
       artifacts: ImplArtifacts;
     }
   ): Promise<ImplementationLog> {
+    const { artifacts } = input;
+    const hasArtifacts =
+      (artifacts.apiEndpoints?.length ?? 0) > 0 ||
+      (artifacts.components?.length ?? 0) > 0 ||
+      (artifacts.functions?.length ?? 0) > 0 ||
+      (artifacts.classes?.length ?? 0) > 0 ||
+      (artifacts.integrations?.length ?? 0) > 0;
+
+    if (!hasArtifacts) {
+      throw new Error(
+        'artifacts must include at least one of: apiEndpoints, components, functions, classes, integrations. ' +
+        'An empty artifacts object is not accepted — document what was actually built.'
+      );
+    }
+
     const path = await this.repoPath(repoId);
     return this.implLogs.write(path, ticketId, subtaskId, input);
   }
