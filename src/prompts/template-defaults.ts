@@ -103,25 +103,63 @@ Developer rules:
 
   test: `# Stage 4 — Testing: {{ticketId}} {{title}}
 
-Write comprehensive unit tests for [ClassName]. Use [your mocking library].
+Write comprehensive unit tests for the new feature. Use {{testFramework}}.
 Cover: happy path, null inputs, boundary values, error paths.
-Follow our test naming convention: [describe]. Target 80% line coverage on new code.
+Target 80% line coverage on new code.
 
-Adapt: specify your test base class, framework (JUnit/TestNG/Jest/pytest), and
-shared test infrastructure.
+## MANDATORY: Execute Tests Before Submitting
 
-Coverage gates: unit 80% line (CI report), integration = all public service
-methods, API tests = all new endpoints, E2E = all acceptance-criteria scenarios.
+**You MUST run the tests and include actual results in record_ai_output.**
+
+Steps (all required):
+1. Run the test suite: \`{{testCommand}}\`
+2. If it does not compile, fix errors first.
+3. Capture the output (pass/fail counts, any errors).
+4. Set stageCoverage based on actual results:
+   - All tests pass + covers happy path + error paths = 0.85 or higher
+   - Some tests pass = 0.5–0.84
+   - Tests fail or not run = 0.0
+
+In \`record_ai_output\` include:
+- \`metrics: { stageCoverage: <number> }\` — REQUIRED or advance_stage will be blocked
+- Actual test output under a \`## Test Execution Results\` section
+
+**Do NOT set stageCoverage if you have not actually run the tests.**
+
+## Gate Flow
+
+After calling \`record_ai_output\`, call \`get_approval_status\` immediately.
+The tool **blocks** until the gate status changes (long poll).
+- \`approved\` → call \`advance_stage\` and proceed.
+- \`needs_revision\` / \`rejected\` → read \`gate.comment\`, revise, re-submit.
+- \`pending_review\` after timeout → call \`get_approval_status\` again.
 `,
 
   build: `# Stage 5 — Build & CI: {{ticketId}} {{title}}
 
-Diagnose this build failure: [paste build log].
-Identify root cause, affected component, and the required fix.
-Distinguish between compilation errors, configuration errors, and test failures.
+Verify the build passes before submitting.
 
-Adapt: mention your build tool (Maven/Gradle/npm) and CI platform
-(Jenkins/GitHub Actions/Concourse/Azure Pipelines).
+## MANDATORY: Run the Build Before Submitting
+
+1. Run: \`{{buildCommand}}\`
+2. Capture the output (success/failure, any errors).
+3. Set buildSuccess based on actual results:
+   - All compilation and tests pass = true
+   - Any failure = false (investigate and fix first)
+
+In \`record_ai_output\` include:
+- \`metrics: { buildSuccess: true }\` — REQUIRED or advance_stage will be blocked
+- Actual build output under a \`## Build Results\` section
+
+Diagnose any failures: identify root cause, affected component, required fix.
+Distinguish compilation errors, configuration errors, and test failures.
+
+## Gate Flow
+
+After calling \`record_ai_output\`, call \`get_approval_status\` immediately.
+The tool **blocks** until the gate status changes (long poll).
+- \`approved\` → call \`advance_stage\` and proceed.
+- \`needs_revision\` / \`rejected\` → read \`gate.comment\`, revise, re-submit.
 `,
 
   deploy: `# Stage 6 — Deployment: {{ticketId}} {{title}}
