@@ -141,6 +141,14 @@ export type ImplementationLog = z.infer<typeof ImplementationLogSchema>;
 export const MarkdownArtifactSchema = z.object({
   kind: z.literal('markdown'),
   path: z.string(),
+  /** Optional execution metrics recorded by AI for test/build stages. */
+  metrics: z
+    .object({
+      buildSuccess: z.boolean().optional(),
+      stageCoverage: z.number().optional(),
+      cycleTimeMs: z.number().optional(),
+    })
+    .optional(),
 });
 
 export const DeployChecklistItemSchema = z.object({
@@ -195,7 +203,14 @@ export type OpsReportArtifact = z.infer<typeof OpsReportArtifactSchema>;
  * supply all fields except path.
  */
 export type ArtifactInput =
-  | { kind: 'markdown' }
+  | {
+      kind: 'markdown';
+      metrics?: {
+        buildSuccess?: boolean;
+        stageCoverage?: number;
+        cycleTimeMs?: number;
+      };
+    }
   | {
       kind: 'deploy-checklist';
       items?: Array<{

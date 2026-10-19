@@ -208,6 +208,8 @@ export function buildMcpServer(app: AppCore): McpServer {
           artifactInput = { kind: 'deploy-checklist', items: checklistItems, rollbackCriteria };
         } else if (stageId === 'ops') {
           artifactInput = { kind: 'ops-report', logsSanitized: logsSanitized ?? false, rcaPath, runbookPath, metrics };
+        } else if (metrics) {
+          artifactInput = { kind: 'markdown', metrics };
         }
         return ok(await app.recordAiOutput(repoId, ticketId, stageId, content, artifactInput));
       } catch (e) {

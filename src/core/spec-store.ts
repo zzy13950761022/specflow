@@ -135,7 +135,13 @@ export class SpecStore {
         metrics: artifactInput.metrics,
       };
     } else {
-      artifact = { kind: 'markdown', path: rel };
+      artifact = {
+        kind: 'markdown',
+        path: rel,
+        ...(artifactInput?.kind === 'markdown' && artifactInput.metrics
+          ? { metrics: artifactInput.metrics }
+          : {}),
+      };
     }
 
     return { artifact, history: { path: historyRel, at } };

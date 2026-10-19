@@ -123,6 +123,53 @@ export class StageMachine {
     if (stage.gate.status !== 'approved') {
       throw new GateNotApprovedError(stageId, stage.gate.status);
     }
+
+    // Develop stage: all subtasks must be completed before advancing.
+    if (stageId === 'develop') {
+      const tasks = stage.subtasks ?? [];
+      if (tasks.length === 0) {
+        throw new Error(
+          'Cannot advance stage "develop": no subtasks registered. ' +
+          'Call set_develop_subtasks to register the implementation plan before advancing.'
+        );
+      }
+      const incomplete = tasks.filter((t) => !t.completed);
+      if (incomplete.length > 0) {
+        throw new Error(
+          `Cannot advance stage "develop": ${incomplete.length} subtask(s) not yet completed: ` +
+          incomplete.map((t) => `"${t.description.slice(0, 60)}"` ).join(', ') + '. ' +
+          'Complete all subtasks (log_implementation + toggle_subtask) before advancing.'
+        );
+      }
+    }
+
+    // Execution evidence checks for test and build stages.
+    if (stageId === 'test') {
+      const metrics = stage.artifact?.kind === 'markdown' ? stage.artifact.metrics : undefined;
+      if (!metrics?.stageCoverage && metrics?.stageCoverage !== 0) {
+        throw new Error(
+          'Cannot advance stage "test": metrics.stageCoverage is required. ' +
+          'Call record_ai_output with metrics: { stageCoverage: <0-1> } to declare test coverage before advancing.'
+        );
+      }
+      if (metrics.stageCoverage < 0.8) {
+        throw new Error(
+          `Cannot advance stage "test": metrics.stageCoverage is ${metrics.stageCoverage} (< 0.8 required). ` +
+          'Improve test coverage or update the recorded metrics to reflect actual results.'
+        );
+      }
+    }
+
+    if (stageId === 'build') {
+      const metrics = stage.artifact?.kind === 'markdown' ? stage.artifact.metrics : undefined;
+      if (metrics?.buildSuccess !== true) {
+        throw new Error(
+          'Cannot advance stage "build": metrics.buildSuccess must be true. ' +
+          'Call record_ai_output with metrics: { buildSuccess: true } to confirm a passing build before advancing.'
+        );
+      }
+    }
+
     const index = STAGE_IDS.indexOf(stageId);
     if (index === STAGE_IDS.length - 1) {
       throw new Error(`Cannot advance: "${stageId}" is the final stage.`);
