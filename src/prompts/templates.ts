@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
 import { STAGE_IDS, type StageId } from '../core/schemas.js';
 import { BLUEPRINT_DEFAULTS } from './template-defaults.js';
-import { introspectRepo, type RepoBrief } from '../core/repo-introspector.js';
+import { introspectRepo, type RepoBrief, type BuildTool } from '../core/repo-introspector.js';
 
 export { BLUEPRINT_DEFAULTS } from './template-defaults.js';
 
@@ -35,6 +35,30 @@ export interface TemplateSummary {
 interface TemplateMeta {
   curated: boolean;
 }
+
+const TEST_COMMANDS: Record<BuildTool, string> = {
+  maven: 'mvn clean test --no-transfer-progress 2>&1 | tail -60',
+  gradle: './gradlew test 2>&1 | tail -60',
+  npm: 'npm test 2>&1 | tail -60',
+  python: 'pytest -v 2>&1 | tail -60',
+  unknown: '<run your test suite here>',
+};
+
+const BUILD_COMMANDS: Record<BuildTool, string> = {
+  maven: 'mvn clean install --no-transfer-progress 2>&1 | tail -60',
+  gradle: './gradlew build 2>&1 | tail -60',
+  npm: 'npm run build 2>&1 | tail -60',
+  python: 'python -m build 2>&1 | tail -60',
+  unknown: '<run your build command here>',
+};
+
+const TEST_FRAMEWORKS: Record<BuildTool, string> = {
+  maven: 'JUnit / Spock (Groovy)',
+  gradle: 'JUnit / Kotest',
+  npm: 'Jest / Vitest',
+  python: 'pytest',
+  unknown: 'your test framework',
+};
 
 export class PromptTemplates {
   private repoTemplatePath(repoPath: string, stageId: StageId): string {
@@ -75,19 +99,26 @@ export class PromptTemplates {
 
   /**
    * Render a stage prompt, interpolating known context (the ticket, the title,
-   * and any approved upstream artifact). Interpolation is intentionally simple:
-   * {{ticketId}}, {{title}}, {{upstreamArtifact}}.
+   * and any approved upstream artifact). Supports {{ticketId}}, {{title}},
+   * {{upstreamArtifact}}, {{testCommand}}, {{buildCommand}}, {{testFramework}}.
+   * The build-tool-specific placeholders are resolved by introspecting the repo.
    */
   async render(
     repoPath: string,
     stageId: StageId,
     vars: { ticketId: string; title: string; upstreamArtifact?: string }
   ): Promise<ResolvedTemplate> {
-    const base = await this.resolve(repoPath, stageId);
+    const [base, brief] = await Promise.all([
+      this.resolve(repoPath, stageId),
+      introspectRepo(repoPath),
+    ]);
     const content = base.content
       .replaceAll('{{ticketId}}', vars.ticketId)
       .replaceAll('{{title}}', vars.title)
-      .replaceAll('{{upstreamArtifact}}', vars.upstreamArtifact ?? '');
+      .replaceAll('{{upstreamArtifact}}', vars.upstreamArtifact ?? '')
+      .replaceAll('{{testCommand}}', TEST_COMMANDS[brief.buildTool])
+      .replaceAll('{{buildCommand}}', BUILD_COMMANDS[brief.buildTool])
+      .replaceAll('{{testFramework}}', TEST_FRAMEWORKS[brief.buildTool]);
     return { ...base, content };
   }
 

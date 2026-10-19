@@ -353,7 +353,12 @@ function NewSpec({ onCreate }: { onCreate: (ticketId: string, title: string) => 
 
 function currentStageId(spec: SpecFile): StageId {
   for (const stage of spec.stages) {
-    if (stage.gate.status !== 'approved') return stage.id;
+    // A stage is "current" if its gate isn't approved yet, OR if it's still
+    // being worked on (aiStatus != done/stubbed) — develop Phase B can still
+    // be in progress even after the Phase A gate is approved.
+    if (stage.gate.status !== 'approved' || (stage.aiStatus !== 'done' && stage.aiStatus !== 'stubbed')) {
+      return stage.id;
+    }
   }
   return spec.stages[spec.stages.length - 1].id;
 }
