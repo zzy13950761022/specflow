@@ -90,13 +90,15 @@ export class SpecStore {
     stageId: StageId,
     stageIndex: number,
     content: string,
+    specPath: string,
     artifactInput?: ArtifactInput
   ): Promise<{ artifact: Artifact; history: { path: string; at: string } }> {
     const kind = artifactInput?.kind ?? 'markdown';
     const rel =
       stageId === 'spec'
-        ? // Stage 0 product is the canonical human spec, lives in specs/.
-          join('specs', `${ticketId}.md`)
+        ? // Stage 0 product is the canonical human spec; its path is owned by
+          // the spec's specPath (.specflow/specs/{ticketId}-{slug}.md).
+          specPath
         : join('.specflow', 'artifacts', ticketId, `${stageIndex}-${stageId}.md`);
 
     await this.atomicWrite(join(repoPath, rel), content);
@@ -134,6 +136,14 @@ export class SpecStore {
         runbookPath: artifactInput.runbookPath,
         metrics: artifactInput.metrics,
       };
+    } else if (kind === 'requirements' && artifactInput?.kind === 'requirements') {
+      // Structured data lives in a JSON sidecar next to the markdown summary.
+      const dataRel = join('.specflow', 'artifacts', ticketId, `${stageIndex}-${stageId}.json`);
+      await this.atomicWrite(
+        join(repoPath, dataRel),
+        JSON.stringify(artifactInput.data, null, 2)
+      );
+      artifact = { kind: 'requirements', path: rel, dataPath: dataRel };
     } else {
       artifact = {
         kind: 'markdown',

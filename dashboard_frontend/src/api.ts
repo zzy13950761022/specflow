@@ -1,4 +1,4 @@
-import type { Artifact, RepoEntry, SpecFile, StageId, TemplateSummary } from './types';
+import type { Artifact, RepoEntry, RequirementsData, SpecFile, StageId, TemplateSummary } from './types';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -34,6 +34,10 @@ export const api = {
   listSpecs: (repoId: string) =>
     fetch(`/api/repos/${repoId}/specs`).then((r) => json<SpecFile[]>(r)),
 
+  /** Fetch a single spec — cold-load fallback for the detail page on deep link / hard reload. */
+  getSpec: (repoId: string, ticketId: string) =>
+    fetch(`/api/repos/${repoId}/specs/${ticketId}`).then((r) => json<SpecFile>(r)),
+
   createSpec: (repoId: string, ticketId: string, title: string) =>
     fetch(`/api/repos/${repoId}/specs`, {
       method: 'POST',
@@ -68,7 +72,13 @@ export const api = {
   /** Fetch a stage's AI-generated artifact content and metadata for review before approving. */
   getArtifact: (repoId: string, ticketId: string, stageId: StageId) =>
     fetch(`/api/repos/${repoId}/specs/${ticketId}/artifact?stageId=${stageId}`).then((r) =>
-      json<{ stageId: StageId; content: string; artifact: Artifact | null }>(r)
+      json<{
+        stageId: StageId;
+        content: string;
+        artifact: Artifact | null;
+        /** Present only for the 'requirements' artifact kind. */
+        data?: RequirementsData | null;
+      }>(r)
     ),
 
   markTemplateCurated: (repoId: string, stageId: StageId) =>

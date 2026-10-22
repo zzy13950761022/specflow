@@ -121,6 +121,7 @@ export class AppCore {
       stageId,
       stageIndex,
       content,
+      spec.specPath,
       artifactInput
     );
     const next = this.stageMachine.recordAiOutput(spec, stageId, artifact, history);
@@ -190,6 +191,31 @@ export class AppCore {
       return await readFile(join(path, stage.artifact.path), 'utf-8');
     } catch (err) {
       logger.warn('Could not read artifact', stage.artifact.path, String(err));
+      return null;
+    }
+  }
+
+  /**
+   * Read a stage's structured artifact sidecar as a parsed object, or null if
+   * the stage has no structured data / it's unreadable. Currently only the
+   * 'requirements' artifact kind carries a JSON sidecar (dataPath).
+   */
+  async readArtifactData(
+    repoId: string,
+    ticketId: string,
+    stageId: StageId
+  ): Promise<unknown | null> {
+    const path = await this.repoPath(repoId);
+    const spec = await this.requireSpec(path, ticketId);
+    const stage = spec.stages.find((s) => s.id === stageId);
+    if (stage?.artifact?.kind !== 'requirements') return null;
+    try {
+      const { readFile } = await import('fs/promises');
+      const { join } = await import('path');
+      const raw = await readFile(join(path, stage.artifact.dataPath), 'utf-8');
+      return JSON.parse(raw);
+    } catch (err) {
+      logger.warn('Could not read artifact data', stage.artifact.dataPath, String(err));
       return null;
     }
   }

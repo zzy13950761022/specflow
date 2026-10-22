@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { AppCore } from '../core/app-core.js';
-import { StageIdSchema, ImplArtifactsSchema, type ArtifactInput } from '../core/schemas.js';
+import { StageIdSchema, ImplArtifactsSchema, RequirementsDataSchema, type ArtifactInput } from '../core/schemas.js';
 import { GateNotApprovedError } from '../core/stage-machine.js';
 import { logger } from '../core/logger.js';
 
@@ -82,10 +82,12 @@ export function buildMcpServer(app: AppCore): McpServer {
     {
       description:
         'Create a new 8-stage spec for a ticket. Derives specPath from the title. ' +
-        'IMPORTANT: always check the templateStatus field in the response. ' +
-        'If templateStatus is "none", call propose_repo_templates then write_repo_template ' +
-        'for all 8 stages BEFORE calling get_stage_prompt. ' +
-        'If templateStatus is "ready", proceed directly to get_stage_prompt.',
+        'Then proceed directly to get_stage_prompt — repo-specific prompt templates are ' +
+        'NOT auto-generated. The templateStatus field reports whether this repo has ' +
+        'user-provided templates ("ready") or will fall back to the built-in blueprint ' +
+        'defaults ("none"); either way get_stage_prompt resolves the right prompt. ' +
+        'Creating repo templates is optional and user-driven (see propose_repo_templates / ' +
+        'write_repo_template, or add .specflow/templates/{stage}.md by hand).',
       inputSchema: { repoId: z.string(), ticketId: z.string(), title: z.string() },
     },
     async ({ repoId, ticketId, title }) => {
@@ -99,10 +101,10 @@ export function buildMcpServer(app: AppCore): McpServer {
         const nextSteps = hasRepoTemplates
           ? ['Repo templates exist. Proceed to get_stage_prompt for the spec stage.']
           : [
-              'No repo-specific templates found. Call propose_repo_templates to get a repo brief, ' +
-              'then call write_repo_template for each of the 8 stages (spec, requirements, design, ' +
-              'develop, test, build, deploy, ops) with content tailored to this repo. ' +
-              'Only then proceed to get_stage_prompt.',
+              'No repo-specific templates found — get_stage_prompt will use the built-in ' +
+              'blueprint defaults. Proceed directly to get_stage_prompt for the spec stage. ' +
+              '(Optional: a user may add repo templates manually via propose_repo_templates / ' +
+              'write_repo_template or by creating .specflow/templates/{stage}.md.)',
             ];
         return ok({ spec, templateStatus, nextSteps });
       } catch (e) {
@@ -170,6 +172,7 @@ export function buildMcpServer(app: AppCore): McpServer {
       description:
         "Persist Claude's artifact for a stage, mark the AI action done, and " +
         'flip the human gate to pending_review. ' +
+        'For REQUIREMENTS stages, supply requirementsData (affectedFiles + reuse/buildFromScratch/dataMigration/integrations) to create a structured requirements artifact the dashboard renders as a tree-table + four-quadrant grid. ' +
         'For DEPLOY stages, supply checklistItems (and optionally rollbackCriteria) to create a structured deploy-checklist artifact. ' +
         'For OPS stages, supply logsSanitized (true/false) to create an ops-report artifact — the governance flag is surfaced in the dashboard. ' +
         'All other stages default to a markdown artifact.',
@@ -199,12 +202,15 @@ export function buildMcpServer(app: AppCore): McpServer {
             buildSuccess: z.boolean().optional(),
           })
           .optional(),
+        requirementsData: RequirementsDataSchema.optional(),
       },
     },
-    async ({ repoId, ticketId, stageId, content, checklistItems, rollbackCriteria, logsSanitized, rcaPath, runbookPath, metrics }) => {
+    async ({ repoId, ticketId, stageId, content, checklistItems, rollbackCriteria, logsSanitized, rcaPath, runbookPath, metrics, requirementsData }) => {
       try {
         let artifactInput: ArtifactInput | undefined;
-        if (stageId === 'deploy' && checklistItems) {
+        if (stageId === 'requirements' && requirementsData) {
+          artifactInput = { kind: 'requirements', data: requirementsData };
+        } else if (stageId === 'deploy' && checklistItems) {
           artifactInput = { kind: 'deploy-checklist', items: checklistItems, rollbackCriteria };
         } else if (stageId === 'ops') {
           artifactInput = { kind: 'ops-report', logsSanitized: logsSanitized ?? false, rcaPath, runbookPath, metrics };

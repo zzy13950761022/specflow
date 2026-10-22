@@ -43,90 +43,165 @@ body {
   box-shadow: 0 0 24px rgba(120, 88, 255, 0.45);
 }
 
-/* Markdown rendering inside the review modal. Scoped so it never leaks into
-   the board chrome. Tuned for the dark glass background. */
+/* ─── Markdown body — Notion-inspired dark theme ──────────────────────────── */
 .md-body {
   color: var(--color-joule-ink);
-  font-size: 0.95rem;
-  line-height: 1.65;
+  font-size: 0.9375rem;
+  line-height: 1.7;
 }
 .md-body > :first-child {
   margin-top: 0;
 }
+
+/* Headings */
 .md-body h1,
 .md-body h2,
 .md-body h3,
 .md-body h4 {
   font-weight: 600;
   line-height: 1.3;
-  margin: 1.4em 0 0.6em;
+  margin: 1.6em 0 0.5em;
+  letter-spacing: -0.01em;
 }
-.md-body h1 {
-  font-size: 1.5rem;
-}
+.md-body h1 { font-size: 1.5rem; }
 .md-body h2 {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.md-body h3 {
-  font-size: 1.1rem;
-}
-.md-body p {
-  margin: 0.7em 0;
-}
+.md-body h3 { font-size: 1rem; color: var(--color-joule-muted); }
+.md-body h4 { font-size: 0.9rem; color: var(--color-joule-muted); }
+
+/* Paragraph & lists */
+.md-body p { margin: 0.6em 0; }
 .md-body ul,
 .md-body ol {
-  margin: 0.7em 0;
-  padding-left: 1.5em;
+  margin: 0.6em 0;
+  padding-left: 1.6em;
 }
-.md-body li {
-  margin: 0.3em 0;
-}
-.md-body ul {
-  list-style: disc;
-}
-.md-body ol {
-  list-style: decimal;
-}
+.md-body li { margin: 0.25em 0; }
+.md-body ul { list-style: disc; }
+.md-body ol { list-style: decimal; }
+
+/* Links */
 .md-body a {
   color: var(--color-joule-blue);
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
+
+/* Inline code */
 .md-body code {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(120, 88, 255, 0.15);
+  border: 1px solid rgba(120, 88, 255, 0.25);
   border-radius: 4px;
-  padding: 0.1em 0.35em;
-  font-size: 0.85em;
+  padding: 0.1em 0.38em;
+  font-size: 0.82em;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #c4b5fd;
 }
+
+/* Code block */
 .md-body pre {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 10px;
-  padding: 0.9em 1em;
+  padding: 1em 1.1em;
   overflow-x: auto;
   margin: 0.9em 0;
 }
 .md-body pre code {
   background: transparent;
+  border: none;
   padding: 0;
+  color: #e2e8f0;
+  font-size: 0.85em;
 }
+
+/* Blockquote */
 .md-body blockquote {
   border-left: 3px solid var(--color-joule-purple);
-  margin: 0.9em 0;
-  padding-left: 1em;
+  margin: 1em 0;
+  padding: 0.4em 1em;
+  background: rgba(120, 88, 255, 0.07);
+  border-radius: 0 6px 6px 0;
   color: var(--color-joule-muted);
 }
+
+/* HR */
 .md-body hr {
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  margin: 1.4em 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 1.6em 0;
 }
+
+/* ── Notion-style table ──────────────────────────────────────────────────── */
 .md-body table {
+  width: 100%;
   border-collapse: collapse;
-  margin: 0.9em 0;
+  margin: 1.1em 0;
+  font-size: 0.875rem;
+  border-radius: 8px;
+  overflow: hidden;
+  /* clip the rounded corners */
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
-.md-body th,
+
+/* Header row */
+.md-body thead tr {
+  background: rgba(120, 88, 255, 0.18);
+}
+.md-body th {
+  padding: 0.55em 0.9em;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-joule-muted);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+}
+
+/* Body rows — zebra stripe */
+.md-body tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.12s;
+}
+.md-body tbody tr:last-child {
+  border-bottom: none;
+}
+.md-body tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+.md-body tbody tr:hover {
+  background: rgba(120, 88, 255, 0.1);
+}
+
 .md-body td {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 0.4em 0.7em;
+  padding: 0.5em 0.9em;
+  vertical-align: top;
+  color: var(--color-joule-ink);
+  line-height: 1.5;
+}
+
+/* Inline code inside table cells */
+.md-body td code,
+.md-body th code {
+  font-size: 0.78rem;
+  padding: 0.05em 0.3em;
+}
+
+/* Strikethrough (GFM) */
+.md-body del {
+  text-decoration: line-through;
+  color: var(--color-joule-muted);
+}
+
+/* Task list (GFM checkboxes) */
+.md-body input[type='checkbox'] {
+  accent-color: var(--color-joule-purple);
+  margin-right: 0.4em;
+  width: 0.9em;
+  height: 0.9em;
 }

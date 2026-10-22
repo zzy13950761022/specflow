@@ -187,16 +187,61 @@ export const OpsReportArtifactSchema = z.object({
     .optional(),
 });
 
+/**
+ * Requirements stage structured data (Phase 5). The dashboard renders a rich
+ * view from this: an affected-files table (the frontend groups the flat file
+ * list into a collapsible tree), plus a four-quadrant grid of reuse /
+ * build-from-scratch / data-migration / integration items. Stored in a JSON
+ * sidecar next to the markdown summary, so the artifact itself only carries
+ * the two paths.
+ *
+ * NOTE: affectedFiles is a FLAT list of full paths — the model is not asked to
+ * build a tree (unreliable). The dashboard derives the directory tree, merging
+ * shared directories and compacting single-child chains (VSCode-style).
+ */
+export const AffectedFileSchema = z.object({
+  /** Full repo-relative path, e.g. 'src/app/shared/provider/Foo.ts'. */
+  path: z.string(),
+  /** Impact note for this file. */
+  impact: z.string().optional(),
+});
+export type AffectedFile = z.infer<typeof AffectedFileSchema>;
+
+export const ReqItemSchema = z.object({
+  title: z.string(),
+  detail: z.string().optional(),
+});
+export type ReqItem = z.infer<typeof ReqItemSchema>;
+
+export const RequirementsDataSchema = z.object({
+  affectedFiles: z.array(AffectedFileSchema).default([]),
+  reuse: z.array(ReqItemSchema).default([]),
+  buildFromScratch: z.array(ReqItemSchema).default([]),
+  dataMigration: z.array(ReqItemSchema).default([]),
+  integrations: z.array(ReqItemSchema).default([]),
+});
+export type RequirementsData = z.infer<typeof RequirementsDataSchema>;
+
+export const RequirementsArtifactSchema = z.object({
+  kind: z.literal('requirements'),
+  /** Human-readable markdown summary. */
+  path: z.string(),
+  /** JSON sidecar holding the structured RequirementsData. */
+  dataPath: z.string(),
+});
+
 export const ArtifactSchema = z.discriminatedUnion('kind', [
   MarkdownArtifactSchema,
   DeployChecklistArtifactSchema,
   OpsReportArtifactSchema,
+  RequirementsArtifactSchema,
 ]);
 export type Artifact = z.infer<typeof ArtifactSchema>;
 export type MarkdownArtifact = z.infer<typeof MarkdownArtifactSchema>;
 export type DeployChecklistArtifact = z.infer<typeof DeployChecklistArtifactSchema>;
 export type DeployChecklistItem = z.infer<typeof DeployChecklistItemSchema>;
 export type OpsReportArtifact = z.infer<typeof OpsReportArtifactSchema>;
+export type RequirementsArtifact = z.infer<typeof RequirementsArtifactSchema>;
 
 /**
  * Input shape for recordAiOutput — path is computed by SpecStore, so callers
@@ -232,6 +277,10 @@ export type ArtifactInput =
         cycleTimeMs?: number;
         buildSuccess?: boolean;
       };
+    }
+  | {
+      kind: 'requirements';
+      data: RequirementsData;
     };
 
 export const StageSchema = z.object({
@@ -325,6 +374,12 @@ export const RecordAiOutputInputSchema = StageTargetInputSchema.extend({
       buildSuccess: z.boolean().optional(),
     })
     .optional(),
+  /**
+   * For requirements stages: structured data the dashboard renders as a
+   * tree-table + four-quadrant grid. Stored in a JSON sidecar. When omitted,
+   * the artifact is stored as plain markdown.
+   */
+  requirementsData: RequirementsDataSchema.optional(),
 });
 
 export const SetDevelopSubtasksInputSchema = z.object({

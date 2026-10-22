@@ -12,7 +12,7 @@ export const BLUEPRINT_DEFAULTS: BlueprintDefaults = {
   spec: `# Stage 0 — Spec: {{ticketId}} {{title}}
 
 You are drafting the AI-consumable spec that Claude reads as its primary context
-for every development session on this ticket. Write it to \`specs/{{ticketId}}-<feature-name>.md\`.
+for every development session on this ticket. Write it to \`.specflow/specs/{{ticketId}}-<feature-name>.md\`.
 
 The spec MUST include:
 - **Acceptance criteria** in Given/When/Then form.
@@ -42,9 +42,39 @@ Identify:
 4. Any data migration requirements.
 5. Integration touchpoints with [list your team's downstream systems].
 
-Format as a structured analysis.
-
 Adapt: describe your system in the terms your team uses.
+
+## How to record this stage
+
+Call record_ai_output with BOTH a markdown \`content\` summary AND the structured
+\`requirementsData\` object below — the dashboard renders \`requirementsData\` as a
+file tree-table plus a four-quadrant grid, and keeps \`content\` as a readable
+fallback.
+
+\`requirementsData\` shape:
+- **affectedFiles**: a FLAT list of the files this work touches (item 1 above).
+  Each entry is \`{ path, impact? }\` where \`path\` is the full repo-relative path
+  (e.g. 'src/app/shared/provider/Foo.ts') and \`impact\` is a short note on what
+  changes and why. Do NOT build a tree — just list files; the dashboard groups
+  them into a collapsible directory tree for you.
+- **reuse**: existing functionality to reuse (item 2) — array of \`{ title, detail? }\`.
+- **buildFromScratch**: what must be built new (item 3) — array of \`{ title, detail? }\`.
+- **dataMigration**: data migration requirements (item 4) — array of \`{ title, detail? }\`.
+- **integrations**: integration touchpoints (item 5) — array of \`{ title, detail? }\`.
+
+Example:
+\`\`\`json
+{
+  "affectedFiles": [
+    { "path": "src/core/order.ts", "impact": "Add discount field to Order" },
+    { "path": "src/api/checkout.ts", "impact": "New POST /checkout/apply-discount" }
+  ],
+  "reuse": [{ "title": "PricingService", "detail": "Reuse existing tax calc pipeline" }],
+  "buildFromScratch": [{ "title": "DiscountRule engine", "detail": "New rule evaluation" }],
+  "dataMigration": [{ "title": "Backfill order.discount = 0 for existing rows" }],
+  "integrations": [{ "title": "Billing service", "detail": "Emit discount-applied event" }]
+}
+\`\`\`
 
 Human gate: Product Owner approves acceptance criteria; Architect confirms
 impact on affected areas.
