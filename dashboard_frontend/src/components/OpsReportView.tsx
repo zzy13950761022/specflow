@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { OpsReportArtifact } from '../types';
 
 /**
@@ -58,7 +59,7 @@ export function OpsReportView({
         </div>
       )}
       <div className="md-body">
-        <ReactMarkdown>{content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
       </div>
     </div>
   );

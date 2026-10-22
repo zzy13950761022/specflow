@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { AI_STATUS_STYLES, GATE_STYLES } from '../lib/stage';
 import {
@@ -208,7 +209,7 @@ function StageBody({
 function Markdown({ content }: { content: string }) {
   return (
     <div className="md-body">
-      <ReactMarkdown>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
     </div>
   );
 }

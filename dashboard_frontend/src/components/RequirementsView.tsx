@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { AffectedFile, ReqItem, RequirementsData } from '../types';
 
 /**
@@ -109,7 +110,7 @@ export function RequirementsView({
           Raw markdown
         </summary>
         <div className="md-body mt-3">
-          <ReactMarkdown>{content}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
         </div>
       </details>
     </div>
