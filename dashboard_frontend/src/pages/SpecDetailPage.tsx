@@ -72,7 +72,7 @@ export function SpecDetailPage() {
   const selectedStage = spec.stages.find((s) => s.id === selectedStageId)!;
 
   return (
-    <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+    <div className="flex-1 flex flex-col gap-4 min-h-0">
       {/* top: back link + title */}
       <div className="flex items-center gap-3 shrink-0">
         <Link
