@@ -74,7 +74,7 @@ export function App() {
             }
           }}
         />
-        <main className="flex-1 flex flex-col gap-4 p-4 overflow-hidden">
+        <main className="flex-1 flex flex-col gap-4 p-4 overflow-auto">
           {error && (
             <div className="glass rounded-xl px-4 py-2 text-sm text-red-600 border-red-400/40">
               {error}
