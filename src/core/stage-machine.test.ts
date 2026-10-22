@@ -15,10 +15,10 @@ describe('StageMachine.createSpec', () => {
     expect(spec.stages.map((s) => s.id)).toEqual([...STAGE_IDS]);
   });
 
-  it('derives specPath as specs/{TICKET}-{slug}.md', () => {
+  it('derives specPath as .specflow/specs/{TICKET}-{slug}.md', () => {
     const sm = new StageMachine();
     const spec = sm.createSpec({ ticketId: 'ABC-123', title: 'Checkout Tax!' });
-    expect(spec.specPath).toBe('specs/ABC-123-checkout-tax.md');
+    expect(spec.specPath).toBe('.specflow/specs/ABC-123-checkout-tax.md');
   });
 
   it('marks all 8 stages auto (Phase 5)', () => {

@@ -62,7 +62,7 @@ export class StageMachine {
       schemaVersion: SCHEMA_VERSION,
       ticketId: input.ticketId,
       title: input.title,
-      specPath: `specs/${input.ticketId}-${slugify(input.title)}.md`,
+      specPath: `.specflow/specs/${input.ticketId}-${slugify(input.title)}.md`,
       stages,
       gateHistory: [],
       createdAt: timestamp,

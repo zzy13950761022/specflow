@@ -43,8 +43,8 @@ describe('AppCore end-to-end Stage 0 -> 1 loop', () => {
     await app.createSpec(repoId, 'ABC-1', 'Checkout Tax');
     const spec = await app.recordAiOutput(repoId, 'ABC-1', 'spec', '# The spec body');
     expect(spec.stages[0].gate.status).toBe('pending_review');
-    // Stage-0 product lives in specs/{TICKET}.md
-    const onDisk = await fs.readFile(join(repo, 'specs', 'ABC-1.md'), 'utf-8');
+    // Stage-0 product lives at the spec's specPath under .specflow/specs/
+    const onDisk = await fs.readFile(join(repo, '.specflow', 'specs', 'ABC-1-checkout-tax.md'), 'utf-8');
     expect(onDisk).toBe('# The spec body');
   });
 
@@ -107,6 +107,40 @@ describe('AppCore readArtifact (review-before-approve)', () => {
 
   it('throws for an unknown spec', async () => {
     await expect(app.readArtifact(repoId, 'NOPE-1', 'spec')).rejects.toThrow(/unknown spec/i);
+  });
+});
+
+describe('AppCore readArtifactData (requirements sidecar)', () => {
+  it('round-trips the structured requirements sidecar', async () => {
+    await app.createSpec(repoId, 'REQ-1', 'Requirements');
+    await app.recordAiOutput(repoId, 'REQ-1', 'requirements', '# summary', {
+      kind: 'requirements',
+      data: {
+        affectedFiles: [{ path: 'src/x.ts', impact: 'change' }],
+        reuse: [{ title: 'ReuseMe' }],
+        buildFromScratch: [],
+        dataMigration: [],
+        integrations: [],
+      },
+    });
+    const data = (await app.readArtifactData(repoId, 'REQ-1', 'requirements')) as {
+      affectedFiles: Array<{ path: string; impact?: string }>;
+      reuse: Array<{ title: string }>;
+    };
+    expect(data).not.toBeNull();
+    expect(data.affectedFiles[0].path).toBe('src/x.ts');
+    expect(data.reuse[0].title).toBe('ReuseMe');
+  });
+
+  it('returns null for a stage whose artifact is not a requirements kind', async () => {
+    await app.createSpec(repoId, 'REQ-1', 'x');
+    await app.recordAiOutput(repoId, 'REQ-1', 'spec', '# plain markdown');
+    expect(await app.readArtifactData(repoId, 'REQ-1', 'spec')).toBeNull();
+  });
+
+  it('returns null for a requirements stage with no artifact yet', async () => {
+    await app.createSpec(repoId, 'REQ-1', 'x');
+    expect(await app.readArtifactData(repoId, 'REQ-1', 'requirements')).toBeNull();
   });
 });
 

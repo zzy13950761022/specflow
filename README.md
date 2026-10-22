@@ -65,8 +65,8 @@ just indexes which repos were added.
 
 ```
 <your-repo>/
-  specs/{TICKET}-{slug}.md               # Canonical spec (readable in PR reviews)
   .specflow/
+    specs/{TICKET}-{slug}.md             # Canonical spec document (AI's primary context)
     specs/{TICKET}.json                  # 8-stage state machine + full gate history
     artifacts/{TICKET}/{n}-{stage}.md    # AI outputs for each stage
     impl-logs/{TICKET}/task-*.md         # Per-subtask implementation logs (develop stage)
@@ -106,12 +106,15 @@ so Claude knows exactly what was created without re-reading the whole codebase.
 
 ### Per-repo prompt templates
 
-Prompt templates are **yours to own**. On first `create_spec`, Claude detects if your
-repo has curated templates. If not, it calls `propose_repo_templates` to inspect your
-repo (CLAUDE.md, build tool, test framework, sample source file) and generates a
-tailored 8-stage template set before running.
+By default AI Pilot uses the built-in **blueprint** prompts for every stage — nothing is
+written to your repo, and `create_spec` does **not** auto-generate templates. Prompt
+templates are **yours to own**: if you want prompts tailored to a repo, create them
+yourself, either by hand (drop a `.specflow/templates/{stage}.md` file) or with the
+optional helper tools (`propose_repo_templates` to inspect the repo and draft a set, then
+`write_repo_template` to save each stage). Drafts become `repo-curated` once you mark them
+curated in the dashboard's Prompts tab.
 
-Template resolution order:
+Template resolution order (first match wins):
 1. `<repo>/.specflow/templates/{stage}.md` + curated flag → **repo-curated**
 2. `<repo>/.specflow/templates/{stage}.md` (draft, not yet curated) → **repo-draft**
 3. Built-in blueprint default → **blueprint-default**

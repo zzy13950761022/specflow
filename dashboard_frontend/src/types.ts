@@ -22,7 +22,12 @@ export const STAGE_LABELS: Record<StageId, string> = {
 };
 
 export type AiStatus = 'not_started' | 'in_progress' | 'done' | 'stubbed';
-export type GateStatus = 'not_ready' | 'pending_review' | 'approved' | 'rejected';
+export type GateStatus =
+  | 'not_ready'
+  | 'pending_review'
+  | 'approved'
+  | 'rejected'
+  | 'needs_revision';
 export type AiCapability = 'auto' | 'stub';
 
 export interface Gate {
@@ -35,6 +40,12 @@ export interface Gate {
 export interface MarkdownArtifact {
   kind: 'markdown';
   path: string;
+  /** Optional execution metrics recorded by AI for test/build stages. */
+  metrics?: {
+    stageCoverage?: number;
+    buildSuccess?: boolean;
+    cycleTimeMs?: number;
+  };
 }
 
 export interface DeployChecklistItem {
@@ -65,7 +76,40 @@ export interface OpsReportArtifact {
   };
 }
 
-export type Artifact = MarkdownArtifact | DeployChecklistArtifact | OpsReportArtifact;
+/** Requirements stage structured data (Phase 5). */
+export interface AffectedFile {
+  /** Full repo-relative path, e.g. 'src/app/shared/provider/Foo.ts'. */
+  path: string;
+  impact?: string;
+}
+
+export interface ReqItem {
+  title: string;
+  detail?: string;
+}
+
+export interface RequirementsData {
+  /** Flat list of affected files; the dashboard groups these into a tree. */
+  affectedFiles: AffectedFile[];
+  reuse: ReqItem[];
+  buildFromScratch: ReqItem[];
+  dataMigration: ReqItem[];
+  integrations: ReqItem[];
+}
+
+export interface RequirementsArtifact {
+  kind: 'requirements';
+  /** Human-readable markdown summary. */
+  path: string;
+  /** JSON sidecar holding the structured RequirementsData. */
+  dataPath: string;
+}
+
+export type Artifact =
+  | MarkdownArtifact
+  | DeployChecklistArtifact
+  | OpsReportArtifact
+  | RequirementsArtifact;
 
 export interface Stage {
   id: StageId;
