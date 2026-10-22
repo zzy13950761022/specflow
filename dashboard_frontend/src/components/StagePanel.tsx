@@ -70,7 +70,7 @@ export function StagePanel({
   return (
     <div className="glass rounded-2xl flex flex-col gap-4 p-5 min-h-full">
       {/* header: stage label + aiStatus + gateStatus + artifact kind + comment */}
-      <div className="flex items-center gap-2 flex-wrap border-b border-white/10 pb-3">
+      <div className="flex items-center gap-2 flex-wrap border-b border-blue-100 pb-3">
         <span className="font-semibold text-sm">{STAGE_LABELS[stage.id]}</span>
         <span
           className={`text-[11px] rounded-full px-2 py-0.5 ${AI_STATUS_STYLES[stage.aiStatus]}`}
@@ -85,13 +85,13 @@ export function StagePanel({
           Gate: {stage.gate.status.replace(/_/g, ' ')}
         </span>
         {artifact && (
-          <span className="text-[10px] rounded-full bg-white/5 px-2 py-0.5 text-joule-muted">
+          <span className="text-[10px] rounded-full bg-blue-50 px-2 py-0.5 text-slate-500">
             {artifact.kind}
           </span>
         )}
         {(stage.gate.status === 'rejected' || stage.gate.status === 'needs_revision') &&
           stage.gate.comment && (
-            <span className="text-[11px] text-red-200/80 italic ml-auto" title={stage.gate.comment}>
+            <span className="text-[11px] text-red-600 italic ml-auto" title={stage.gate.comment}>
               "{stage.gate.comment}"
             </span>
           )}
@@ -99,10 +99,10 @@ export function StagePanel({
 
       {/* body */}
       <div className="flex-1">
-        {loading && <p className="text-sm text-joule-muted">Loading…</p>}
-        {err && <p className="text-sm text-red-300">{err}</p>}
+        {loading && <p className="text-sm text-slate-500">Loading…</p>}
+        {err && <p className="text-sm text-red-600">{err}</p>}
         {!loading && !err && content === null && (
-          <div className="grid place-items-center py-16 text-center text-joule-muted text-sm">
+          <div className="grid place-items-center py-16 text-center text-slate-500 text-sm">
             <div>
               <p>Nothing generated for this stage yet.</p>
               <p className="text-[11px] mt-1 opacity-70">
@@ -225,14 +225,14 @@ function StatCard({
 }) {
   const toneCls =
     tone === 'good'
-      ? 'text-emerald-300'
+      ? 'text-emerald-600'
       : tone === 'warn'
-        ? 'text-amber-300'
-        : 'text-red-300';
+        ? 'text-amber-600'
+        : 'text-red-600';
   return (
-    <div className="inline-flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3 w-fit">
+    <div className="inline-flex items-center gap-3 rounded-xl bg-blue-50 px-4 py-3 w-fit">
       <span className={`text-2xl font-bold ${toneCls}`}>{value}</span>
-      <span className="text-[11px] text-joule-muted uppercase tracking-wide">{label}</span>
+      <span className="text-[11px] text-slate-500 uppercase tracking-wide">{label}</span>
     </div>
   );
 }

@@ -30,19 +30,19 @@ export function Header({
       <div className="w-px h-8 bg-white/10 mx-1 shrink-0" />
 
       <div className="flex items-center gap-2 flex-1 min-w-0">
-        <span className="text-[11px] text-joule-muted uppercase tracking-widest shrink-0">
+        <span className="text-[11px] text-slate-500 uppercase tracking-widest shrink-0">
           Repo
         </span>
 
         {repos.length > 0 ? (
           <RepoDropdown repos={repos} activeRepo={activeRepo} onSelect={onSelect} />
         ) : (
-          <span className="text-sm text-joule-muted italic">No repos yet</span>
+          <span className="text-sm text-slate-500 italic">No repos yet</span>
         )}
 
         {active && (
           <span
-            className="text-[11px] text-joule-muted truncate opacity-60 hidden sm:block"
+            className="text-[11px] text-slate-500 truncate opacity-60 hidden sm:block"
             title={active.path}
           >
             {active.path}
@@ -69,7 +69,7 @@ export function Header({
                 }
               }}
               placeholder="/path/to/repo"
-              className="bg-black/30 rounded-lg px-3 py-1.5 text-sm outline-none border border-white/10 focus:border-joule-purple w-52"
+              className="bg-gray-100 rounded-lg px-3 py-1.5 text-sm outline-none border border-blue-200 focus:border-blue-500 w-52"
             />
             <button
               onClick={() => {
@@ -88,7 +88,7 @@ export function Header({
                 setPath('');
                 setShowAdd(false);
               }}
-              className="text-joule-muted hover:text-joule-ink text-sm px-2"
+              className="text-slate-500 hover:text-gray-800 text-sm px-2"
             >
               ✕
             </button>
@@ -112,7 +112,7 @@ export function Header({
             </button>
             <button
               onClick={() => setShowAdd(true)}
-              className="text-[11px] text-joule-muted hover:text-joule-ink"
+              className="text-[11px] text-slate-500 hover:text-gray-800"
             >
               or path
             </button>
@@ -157,10 +157,10 @@ function RepoDropdown({
       <button
         ref={btnRef}
         onClick={handleOpen}
-        className="flex items-center gap-2 bg-black/30 border border-white/10 rounded-lg pl-3 pr-2.5 py-1.5 text-sm text-joule-ink hover:border-white/20 focus:border-joule-purple outline-none transition min-w-[180px] max-w-[280px]"
+        className="flex items-center gap-2 bg-gray-100 border border-blue-200 rounded-lg pl-3 pr-2.5 py-1.5 text-sm text-gray-800 hover:border-blue-300 focus:border-blue-500 outline-none transition min-w-[180px] max-w-[280px]"
       >
         <span className="truncate flex-1 text-left">{active?.name ?? 'Select repo'}</span>
-        <span className={`text-[10px] text-joule-muted transition-transform ${open ? 'rotate-180' : ''}`}>
+        <span className={`text-[10px] text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}>
           ▼
         </span>
       </button>
@@ -187,12 +187,12 @@ function RepoDropdown({
                   setOpen(false);
                 }}
                 className={`w-full text-left px-3 py-2 text-sm transition flex flex-col gap-0.5 ${
-                  r.id === activeRepo ? 'joule-gradient text-white' : 'hover:bg-white/5 text-joule-ink'
+                  r.id === activeRepo ? 'joule-gradient text-white' : 'hover:bg-blue-50 text-gray-800'
                 }`}
               >
                 <span className="font-medium truncate">{r.name}</span>
                 <span
-                  className={`text-[11px] truncate ${r.id === activeRepo ? 'opacity-70' : 'text-joule-muted'}`}
+                  className={`text-[11px] truncate ${r.id === activeRepo ? 'opacity-70' : 'text-slate-500'}`}
                 >
                   {r.path}
                 </span>

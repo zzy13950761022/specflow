@@ -62,7 +62,7 @@ export function SpecDetailPage() {
   }
   if (!spec || !selectedStageId || !repoId || !ticketId) {
     return (
-      <div className="glass rounded-2xl flex-1 grid place-items-center text-joule-muted text-sm">
+      <div className="glass rounded-2xl flex-1 grid place-items-center text-slate-500 text-sm">
         Loading spec…
       </div>
     );
@@ -77,12 +77,12 @@ export function SpecDetailPage() {
       <div className="flex items-center gap-3 shrink-0">
         <Link
           to="/"
-          className="text-sm text-joule-muted hover:text-joule-ink rounded-lg px-2 py-1 bg-white/5"
+          className="text-sm text-slate-500 hover:text-gray-800 rounded-lg px-2 py-1 bg-blue-50"
         >
           ← Board
         </Link>
         <span className="font-semibold text-sm">{spec.ticketId}</span>
-        <span className="text-sm text-joule-muted truncate" title={spec.title}>
+        <span className="text-sm text-slate-500 truncate" title={spec.title}>
           {spec.title}
         </span>
       </div>
@@ -112,7 +112,7 @@ export function SpecDetailPage() {
             onDone={() => refreshSpecs(repoId)}
           />
         ) : (
-          <div className="flex items-center gap-2 text-sm text-joule-muted">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
             <span>Gate:</span>
             <span className={`rounded-full px-2 py-0.5 text-[11px] ${GATE_STYLES[selectedStage.gate.status]}`}>
               {selectedStage.gate.status.replace(/_/g, ' ')}

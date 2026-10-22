@@ -1,13 +1,13 @@
 @import 'tailwindcss';
 
-/* Joule-inspired dark glassmorphism palette. */
+/* SAP light palette — white-primary, SAP blue accents. */
 @theme {
-  --color-joule-bg: #1a1033;
-  --color-joule-bg-2: #241247;
-  --color-joule-purple: #7858ff;
-  --color-joule-blue: #4a9fff;
-  --color-joule-ink: #ece9fb;
-  --color-joule-muted: #a89fd4;
+  --color-joule-bg:     #f0f4f9;
+  --color-joule-bg-2:   #e4ecf5;
+  --color-joule-purple: #0064d9;
+  --color-joule-blue:   #0064d9;
+  --color-joule-ink:    #1d2733;
+  --color-joule-muted:  #5a7a96;
 }
 
 html,
@@ -18,40 +18,34 @@ body,
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 15% -10%, rgba(120, 88, 255, 0.25), transparent 60%),
-    radial-gradient(900px 500px at 110% 10%, rgba(74, 159, 255, 0.18), transparent 55%),
-    var(--color-joule-bg);
+  background: var(--color-joule-bg);
   color: var(--color-joule-ink);
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-/* Frosted glass card. */
+/* White card with subtle shadow — replaces dark glass. */
 .glass {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  background: #ffffff;
+  border: 1px solid #d4e2ef;
+  box-shadow: 0 2px 8px rgba(0, 50, 120, 0.07);
 }
 
-/* Purple->blue gradient accent (progress bars, active chips). */
+/* SAP blue gradient (buttons, active chips). */
 .joule-gradient {
-  background: linear-gradient(90deg, var(--color-joule-purple), var(--color-joule-blue));
+  background: linear-gradient(90deg, #0050b3, #0064d9);
 }
 
 .joule-glow {
-  box-shadow: 0 0 24px rgba(120, 88, 255, 0.45);
+  box-shadow: 0 0 16px rgba(0, 100, 217, 0.3);
 }
 
-/* ─── Markdown body — Notion-inspired dark theme ──────────────────────────── */
+/* ─── Markdown body ───────────────────────────────────────────────────────── */
 .md-body {
   color: var(--color-joule-ink);
   font-size: 0.9375rem;
   line-height: 1.7;
 }
-.md-body > :first-child {
-  margin-top: 0;
-}
+.md-body > :first-child { margin-top: 0; }
 
 /* Headings */
 .md-body h1,
@@ -62,12 +56,13 @@ body {
   line-height: 1.3;
   margin: 1.6em 0 0.5em;
   letter-spacing: -0.01em;
+  color: #0d1e38;
 }
 .md-body h1 { font-size: 1.5rem; }
 .md-body h2 {
   font-size: 1.15rem;
   padding-bottom: 0.35em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid #d4e2ef;
 }
 .md-body h3 { font-size: 1rem; color: var(--color-joule-muted); }
 .md-body h4 { font-size: 0.9rem; color: var(--color-joule-muted); }
@@ -75,37 +70,34 @@ body {
 /* Paragraph & lists */
 .md-body p { margin: 0.6em 0; }
 .md-body ul,
-.md-body ol {
-  margin: 0.6em 0;
-  padding-left: 1.6em;
-}
+.md-body ol { margin: 0.6em 0; padding-left: 1.6em; }
 .md-body li { margin: 0.25em 0; }
 .md-body ul { list-style: disc; }
 .md-body ol { list-style: decimal; }
 
 /* Links */
 .md-body a {
-  color: var(--color-joule-blue);
+  color: #0064d9;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 /* Inline code */
 .md-body code {
-  background: rgba(120, 88, 255, 0.15);
-  border: 1px solid rgba(120, 88, 255, 0.25);
+  background: #e8f0fb;
+  border: 1px solid #bdd3f0;
   border-radius: 4px;
   padding: 0.1em 0.38em;
   font-size: 0.82em;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #c4b5fd;
+  color: #0050b3;
 }
 
 /* Code block */
 .md-body pre {
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
+  background: #f5f8fc;
+  border: 1px solid #d4e2ef;
+  border-radius: 8px;
   padding: 1em 1.1em;
   overflow-x: auto;
   margin: 0.9em 0;
@@ -114,16 +106,16 @@ body {
   background: transparent;
   border: none;
   padding: 0;
-  color: #e2e8f0;
+  color: #1d2733;
   font-size: 0.85em;
 }
 
 /* Blockquote */
 .md-body blockquote {
-  border-left: 3px solid var(--color-joule-purple);
+  border-left: 3px solid #0064d9;
   margin: 1em 0;
   padding: 0.4em 1em;
-  background: rgba(120, 88, 255, 0.07);
+  background: #e8f0fb;
   border-radius: 0 6px 6px 0;
   color: var(--color-joule-muted);
 }
@@ -131,11 +123,11 @@ body {
 /* HR */
 .md-body hr {
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid #d4e2ef;
   margin: 1.6em 0;
 }
 
-/* ── Notion-style table ──────────────────────────────────────────────────── */
+/* ── SAP-style table ─────────────────────────────────────────────────────── */
 .md-body table {
   width: 100%;
   border-collapse: collapse;
@@ -143,64 +135,48 @@ body {
   font-size: 0.875rem;
   border-radius: 8px;
   overflow: hidden;
-  /* clip the rounded corners */
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid #d4e2ef;
 }
 
-/* Header row */
 .md-body thead tr {
-  background: rgba(120, 88, 255, 0.18);
+  background: #e8f0fb;
 }
 .md-body th {
-  padding: 0.55em 0.9em;
+  padding: 0.6em 0.9em;
   text-align: left;
   font-weight: 600;
   font-size: 0.8rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: var(--color-joule-muted);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: #0050b3;
+  border-bottom: 1px solid #bdd3f0;
   white-space: nowrap;
 }
 
-/* Body rows — zebra stripe */
 .md-body tbody tr {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  transition: background 0.12s;
+  border-bottom: 1px solid #e8f0fb;
+  transition: background 0.1s;
 }
-.md-body tbody tr:last-child {
-  border-bottom: none;
-}
-.md-body tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.025);
-}
-.md-body tbody tr:hover {
-  background: rgba(120, 88, 255, 0.1);
-}
+.md-body tbody tr:last-child { border-bottom: none; }
+.md-body tbody tr:nth-child(even) { background: #f5f8fc; }
+.md-body tbody tr:hover { background: #deeafa; }
 
 .md-body td {
   padding: 0.5em 0.9em;
   vertical-align: top;
-  color: var(--color-joule-ink);
+  color: #1d2733;
   line-height: 1.5;
 }
 
-/* Inline code inside table cells */
 .md-body td code,
-.md-body th code {
-  font-size: 0.78rem;
-  padding: 0.05em 0.3em;
-}
+.md-body th code { font-size: 0.78rem; padding: 0.05em 0.3em; }
 
-/* Strikethrough (GFM) */
-.md-body del {
-  text-decoration: line-through;
-  color: var(--color-joule-muted);
-}
+/* Strikethrough */
+.md-body del { text-decoration: line-through; color: var(--color-joule-muted); }
 
-/* Task list (GFM checkboxes) */
+/* Task list */
 .md-body input[type='checkbox'] {
-  accent-color: var(--color-joule-purple);
+  accent-color: #0064d9;
   margin-right: 0.4em;
   width: 0.9em;
   height: 0.9em;

@@ -9,13 +9,13 @@ export function NewSpec({ onCreate }: { onCreate: (ticketId: string, title: stri
         value={ticketId}
         onChange={(e) => setTicketId(e.target.value)}
         placeholder="TICKET-123"
-        className="bg-black/30 rounded-lg px-3 py-2 text-sm outline-none border border-white/10 focus:border-joule-purple w-36"
+        className="bg-gray-100 rounded-lg px-3 py-2 text-sm outline-none border border-blue-200 focus:border-blue-500 w-36"
       />
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Feature title"
-        className="bg-black/30 rounded-lg px-3 py-2 text-sm outline-none border border-white/10 focus:border-joule-purple flex-1"
+        className="bg-gray-100 rounded-lg px-3 py-2 text-sm outline-none border border-blue-200 focus:border-blue-500 flex-1"
       />
       <button
         onClick={() => {

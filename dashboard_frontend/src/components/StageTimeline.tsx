@@ -13,7 +13,7 @@ export function StageDot({ stage, active }: { stage: Stage; active: boolean }) {
       : isRejected
         ? 'bg-red-400'
         : active
-          ? 'bg-joule-blue'
+          ? 'bg-blue-500'
           : 'bg-white/15';
 
   return <span className={`w-2 h-2 rounded-full ${cls}`} title={stage.id} />;
@@ -57,8 +57,8 @@ export function StageTimeline({
                 : isRevision
                   ? 'border-orange-400 bg-orange-400/20 text-orange-200'
                   : isActive
-                    ? 'border-joule-blue bg-joule-blue/20 text-joule-blue'
-                    : 'border-white/15 bg-white/5 text-joule-muted';
+                    ? 'border-blue-500 bg-blue-100 text-blue-600'
+                    : 'border-blue-200 bg-white/5 text-slate-500';
 
           const lineColor = isApproved ? 'bg-emerald-400/50' : 'bg-white/10';
 
@@ -70,13 +70,13 @@ export function StageTimeline({
                   onClick={() => onSelectStage(stage.id)}
                   title={`Select ${STAGE_LABELS[stage.id]}`}
                   className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition ${nodeColor} ${
-                    isSelected ? 'ring-2 ring-joule-purple ring-offset-2 ring-offset-transparent' : ''
+                    isSelected ? 'ring-2 ring-joule-purple ring-offset-2 ring-offset-white' : ''
                   } hover:scale-110 cursor-pointer`}
                 >
                   {isApproved ? '✓' : isRejected ? '✗' : isRevision ? '↩' : isPending ? '…' : i + 1}
                 </button>
                 <span
-                  className={`text-[10px] mt-1 text-center leading-tight ${isFuture ? 'text-white/25' : isSelected ? 'text-joule-ink font-semibold' : isActive ? 'text-joule-ink' : 'text-joule-muted'}`}
+                  className={`text-[10px] mt-1 text-center leading-tight ${isFuture ? 'text-white/25' : isSelected ? 'text-gray-800 font-semibold' : isActive ? 'text-gray-800' : 'text-slate-500'}`}
                 >
                   {STAGE_LABELS[stage.id]}
                 </span>

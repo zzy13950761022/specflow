@@ -40,8 +40,8 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
   }
 
   return (
-    <div className="flex flex-col gap-1.5 border-t border-white/5 pt-2 mt-0.5">
-      <div className="flex items-center justify-between text-[11px] text-joule-muted">
+    <div className="flex flex-col gap-1.5 border-t border-blue-100 pt-2 mt-0.5">
+      <div className="flex items-center justify-between text-[11px] text-slate-500">
         <span>Subtasks</span>
         {subtasks.length > 0 && (
           <span>
@@ -55,8 +55,8 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
           {subtasks.map((task) => (
             <label
               key={task.id}
-              className={`flex items-start gap-2 text-[11px] cursor-pointer rounded-lg px-2 py-1 hover:bg-white/5 transition ${
-                task.completed ? 'text-joule-muted line-through' : 'text-joule-ink'
+              className={`flex items-start gap-2 text-[11px] cursor-pointer rounded-lg px-2 py-1 hover:bg-blue-50 transition ${
+                task.completed ? 'text-slate-500 line-through' : 'text-gray-800'
               }`}
             >
               <input
@@ -73,7 +73,7 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
       )}
 
       {subtasks.length > 0 && (
-        <div className="h-1 rounded-full bg-black/40 overflow-hidden">
+        <div className="h-1 rounded-full bg-gray-200 overflow-hidden">
           <div
             className="h-full joule-gradient transition-all"
             style={{
@@ -93,7 +93,7 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
             if (e.key === 'Enter') handleAdd();
           }}
           placeholder="Add a subtask..."
-          className="flex-1 bg-black/30 rounded-lg px-2 py-1 text-[11px] outline-none border border-white/10 focus:border-joule-purple"
+          className="flex-1 bg-gray-100 rounded-lg px-2 py-1 text-[11px] outline-none border border-blue-200 focus:border-blue-500"
         />
         <button
           onClick={handleAdd}

@@ -106,7 +106,7 @@ export function RequirementsView({
 
       {/* Raw markdown fallback */}
       <details className="text-sm">
-        <summary className="cursor-pointer text-joule-muted hover:text-joule-ink">
+        <summary className="cursor-pointer text-slate-500 hover:text-gray-800">
           Raw markdown
         </summary>
         <div className="md-body mt-3">
@@ -119,7 +119,7 @@ export function RequirementsView({
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-joule-muted">
+    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
       {children}
     </h3>
   );
@@ -291,7 +291,7 @@ function TreeTable({ files }: { files: AffectedFile[] }) {
     <div className="overflow-hidden rounded-xl border border-white/10">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="bg-white/5 text-left text-[11px] uppercase tracking-wide text-joule-muted">
+          <tr className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
             <th className="px-3 py-2 font-medium">Path</th>
             <th className="px-3 py-2 font-medium">Impact</th>
           </tr>
@@ -325,19 +325,19 @@ function TreeRows({ node, depth }: { node: TreeNode; depth: number }) {
             onClick={hasChildren ? () => setOpen((o) => !o) : undefined}
           >
             {/* chevron: only directories with children get one; files/empty dirs get a spacer */}
-            <span className="inline-flex w-3.5 justify-center text-joule-muted">
+            <span className="inline-flex w-3.5 justify-center text-slate-500">
               {hasChildren ? <Chevron open={open} /> : null}
             </span>
             <span className="inline-flex w-4 justify-center">
               {isDir ? <FolderIcon open={open} /> : <FileIcon />}
             </span>
-            <span className={isDir ? 'font-medium text-joule-ink' : 'text-joule-ink/90'}>
+            <span className={isDir ? 'font-medium text-gray-800' : 'text-gray-700'}>
               {node.name}
             </span>
           </span>
         </td>
         {/* Directory rows leave Impact blank. */}
-        <td className="px-3 py-1.5 text-joule-muted">{isDir ? '' : node.impact ?? ''}</td>
+        <td className="px-3 py-1.5 text-slate-500">{isDir ? '' : node.impact ?? ''}</td>
       </tr>
       {hasChildren &&
         open &&
@@ -397,7 +397,7 @@ function FolderIcon({ open }: { open: boolean }) {
 function FileIcon() {
   // VSCode-ish document with a folded corner.
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden className="text-joule-muted">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden className="text-slate-500">
       <path
         d="M4 1.5h5L13 5.5v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z"
         fill="currentColor"
@@ -416,8 +416,8 @@ type Accent = 'emerald' | 'purple' | 'blue' | 'amber';
 
 const ACCENTS: Record<Accent, { border: string; dot: string; title: string }> = {
   emerald: { border: 'border-emerald-400/40', dot: 'bg-emerald-400', title: 'text-emerald-200' },
-  purple: { border: 'border-joule-purple/50', dot: 'bg-joule-purple', title: 'text-joule-ink' },
-  blue: { border: 'border-joule-blue/50', dot: 'bg-joule-blue', title: 'text-joule-blue' },
+  purple: { border: 'border-blue-300', dot: 'bg-blue-500', title: 'text-gray-800' },
+  blue: { border: 'border-blue-200', dot: 'bg-blue-500', title: 'text-blue-600' },
   amber: { border: 'border-amber-400/40', dot: 'bg-amber-400', title: 'text-amber-200' },
 };
 
@@ -436,15 +436,15 @@ function QuadrantCard({
       <div className="mb-3 flex items-center gap-2">
         <span className={`h-2 w-2 rounded-full ${a.dot}`} aria-hidden />
         <h3 className={`text-sm font-semibold ${a.title}`}>{title}</h3>
-        <span className="ml-auto text-[11px] text-joule-muted">{items.length}</span>
+        <span className="ml-auto text-[11px] text-slate-500">{items.length}</span>
       </div>
       {items.length ? (
         <ul className="flex flex-col gap-2">
           {items.map((item, i) => (
-            <li key={i} className="rounded-lg bg-black/20 px-3 py-2">
-              <div className="text-sm text-joule-ink">{item.title}</div>
+            <li key={i} className="rounded-lg bg-gray-50 px-3 py-2">
+              <div className="text-sm text-gray-800">{item.title}</div>
               {item.detail && (
-                <div className="mt-0.5 text-[12px] text-joule-muted">{item.detail}</div>
+                <div className="mt-0.5 text-[12px] text-slate-500">{item.detail}</div>
               )}
             </li>
           ))}
@@ -457,5 +457,5 @@ function QuadrantCard({
 }
 
 function EmptyNote({ children }: { children: React.ReactNode }) {
-  return <p className="text-[12px] italic text-joule-muted">{children}</p>;
+  return <p className="text-[12px] italic text-slate-500">{children}</p>;
 }
