@@ -18,23 +18,23 @@ export function DeployChecklistView({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-joule-muted">Status:</span>
+        <span className="text-xs text-slate-500">Status:</span>
         <span className="text-xs rounded-full bg-white/10 px-2 py-0.5">{artifact.status}</span>
         {artifact.rollbackCriteria && (
-          <span className="text-xs text-amber-300/80 italic ml-auto">
+          <span className="text-xs text-amber-600/80 italic ml-auto">
             ↩ {artifact.rollbackCriteria}
           </span>
         )}
       </div>
       <ul className="flex flex-col gap-2">
         {artifact.items.map((item) => (
-          <li key={item.id} className="flex items-start gap-2 rounded-lg bg-white/5 px-3 py-2">
+          <li key={item.id} className="flex items-start gap-2 rounded-lg bg-blue-50 px-3 py-2">
             <span
               className={`mt-0.5 w-4 h-4 rounded shrink-0 flex items-center justify-center text-[10px] ${item.checked ? 'joule-gradient text-white' : 'border border-white/20'}`}
             >
               {item.checked ? '✓' : ''}
             </span>
-            <span className={`text-sm flex-1 ${item.checked ? 'line-through text-joule-muted' : ''}`}>
+            <span className={`text-sm flex-1 ${item.checked ? 'line-through text-slate-500' : ''}`}>
               {item.description}
             </span>
             {item.governanceFlag !== 'none' && (
@@ -48,7 +48,7 @@ export function DeployChecklistView({
         ))}
       </ul>
       {content && (
-        <details className="text-xs text-joule-muted">
+        <details className="text-xs text-slate-500">
           <summary className="cursor-pointer">Raw markdown</summary>
           <div className="md-body mt-2">
             <ReactMarkdown>{content}</ReactMarkdown>

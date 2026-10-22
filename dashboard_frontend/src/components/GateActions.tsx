@@ -41,7 +41,7 @@ export function GateActions({
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           placeholder={isReject ? 'Why reject?' : 'What needs revision?'}
-          className="bg-black/30 rounded-lg px-3 py-2 text-sm outline-none border border-white/10 focus:border-joule-purple"
+          className="bg-gray-100 rounded-lg px-3 py-2 text-sm outline-none border border-blue-200 focus:border-blue-500"
         />
         <div className="flex gap-2">
           <button

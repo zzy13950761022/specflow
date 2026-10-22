@@ -18,22 +18,22 @@ export function currentStageId(spec: SpecFile): StageId {
 }
 
 export const GATE_STYLES: Record<GateStatus, string> = {
-  not_ready: 'bg-white/10 text-joule-muted',
-  pending_review: 'bg-amber-400/20 text-amber-200',
-  approved: 'bg-emerald-400/20 text-emerald-200',
-  rejected: 'bg-red-400/20 text-red-200',
-  needs_revision: 'bg-orange-400/20 text-orange-200',
+  not_ready: 'bg-gray-100 text-slate-500',
+  pending_review: 'bg-amber-100 text-amber-700',
+  approved: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-red-100 text-red-700',
+  needs_revision: 'bg-orange-100 text-orange-700',
 };
 
 export const AI_STATUS_STYLES: Record<AiStatus, string> = {
-  not_started: 'bg-white/10 text-joule-muted',
-  in_progress: 'bg-joule-blue/20 text-joule-blue',
-  done: 'bg-emerald-400/20 text-emerald-200',
-  stubbed: 'bg-white/10 text-joule-muted',
+  not_started: 'bg-gray-100 text-slate-500',
+  in_progress: 'bg-blue-100 text-blue-700',
+  done: 'bg-emerald-100 text-emerald-700',
+  stubbed: 'bg-gray-100 text-slate-500',
 };
 
 export const SOURCE_BADGE: Record<TemplateSource, { label: string; cls: string }> = {
-  'repo-curated': { label: 'curated', cls: 'bg-emerald-400/20 text-emerald-200' },
-  'repo-draft': { label: 'draft', cls: 'bg-amber-400/20 text-amber-200' },
-  'blueprint-default': { label: 'blueprint', cls: 'bg-white/10 text-joule-muted' },
+  'repo-curated': { label: 'curated', cls: 'bg-emerald-100 text-emerald-700' },
+  'repo-draft': { label: 'draft', cls: 'bg-amber-100 text-amber-700' },
+  'blueprint-default': { label: 'blueprint', cls: 'bg-gray-100 text-slate-500' },
 };

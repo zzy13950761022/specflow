@@ -12,7 +12,7 @@ export function BoardPage() {
 
   if (!activeRepo) {
     return (
-      <div className="glass rounded-2xl flex-1 grid place-items-center text-joule-muted">
+      <div className="glass rounded-2xl flex-1 grid place-items-center text-slate-500">
         Add or select a repository to begin.
       </div>
     );

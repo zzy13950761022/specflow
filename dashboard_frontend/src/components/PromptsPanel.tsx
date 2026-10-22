@@ -29,10 +29,10 @@ export function PromptsPanel({
   return (
     <div className="glass rounded-2xl flex-1 flex flex-col gap-0 overflow-auto">
       <div className="px-5 pt-4 pb-2 flex items-center gap-2">
-        <h2 className="text-xs uppercase tracking-widest text-joule-muted font-semibold">
+        <h2 className="text-xs uppercase tracking-widest text-slate-500 font-semibold">
           Prompt Templates
         </h2>
-        <span className="text-[11px] text-joule-muted ml-auto">
+        <span className="text-[11px] text-slate-500 ml-auto">
           Curate drafts after reviewing — curated templates are preferred over blueprint defaults
         </span>
       </div>
@@ -40,7 +40,7 @@ export function PromptsPanel({
         const badge = SOURCE_BADGE[tpl.source];
         const isExpanded = expanded === tpl.stageId;
         return (
-          <div key={tpl.stageId} className="border-t border-white/5">
+          <div key={tpl.stageId} className="border-t border-gray-200">
             <div
               className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-white/3 transition"
               onClick={() => setExpanded(isExpanded ? null : tpl.stageId)}
@@ -69,10 +69,10 @@ export function PromptsPanel({
                   {curating === tpl.stageId ? 'Marking…' : 'Mark curated'}
                 </button>
               )}
-              <span className="ml-auto text-joule-muted text-xs">{isExpanded ? '▲' : '▼'}</span>
+              <span className="ml-auto text-slate-500 text-xs">{isExpanded ? '▲' : '▼'}</span>
             </div>
             {isExpanded && (
-              <pre className="mx-5 mb-3 rounded-xl bg-black/30 border border-white/5 px-4 py-3 text-[11px] text-joule-ink/80 overflow-auto whitespace-pre-wrap max-h-64">
+              <pre className="mx-5 mb-3 rounded-xl bg-gray-100 border border-gray-200 px-4 py-3 text-[11px] text-gray-600 overflow-auto whitespace-pre-wrap max-h-64">
                 {tpl.content}
               </pre>
             )}

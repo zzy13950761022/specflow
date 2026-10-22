@@ -76,7 +76,7 @@ export function App() {
         />
         <main className="flex-1 flex flex-col gap-4 p-4 overflow-hidden">
           {error && (
-            <div className="glass rounded-xl px-4 py-2 text-sm text-red-300 border-red-400/40">
+            <div className="glass rounded-xl px-4 py-2 text-sm text-red-600 border-red-400/40">
               {error}
               <button
                 className="ml-3 opacity-70 hover:opacity-100"

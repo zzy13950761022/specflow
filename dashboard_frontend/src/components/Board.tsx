@@ -6,14 +6,14 @@ import { StageDot } from './StageTimeline';
 export function Board({ repoId, specs }: { repoId: string | null; specs: SpecFile[] }) {
   if (!repoId) {
     return (
-      <div className="glass rounded-2xl flex-1 grid place-items-center text-joule-muted">
+      <div className="glass rounded-2xl flex-1 grid place-items-center text-slate-500">
         Add or select a repository to begin.
       </div>
     );
   }
   if (specs.length === 0) {
     return (
-      <div className="glass rounded-2xl flex-1 grid place-items-center text-joule-muted text-sm">
+      <div className="glass rounded-2xl flex-1 grid place-items-center text-slate-500 text-sm">
         No specs yet — create one above.
       </div>
     );
@@ -44,12 +44,12 @@ function SpecRow({ repoId, spec }: { repoId: string; spec: SpecFile }) {
   return (
     <div
       onClick={() => navigate(detailPath)}
-      className={`glass rounded-2xl overflow-hidden transition-all cursor-pointer hover:bg-white/3 ${hasPending ? 'border border-amber-400/30' : 'border border-transparent'}`}
+      className={`glass rounded-2xl overflow-hidden transition-all cursor-pointer hover:bg-blue-50 ${hasPending ? 'border border-amber-300' : 'border border-transparent'}`}
     >
       <div className="w-full flex items-center gap-3 px-4 py-3 text-left">
         <span className="font-semibold text-sm shrink-0 w-28 truncate">{spec.ticketId}</span>
 
-        <span className="text-sm text-joule-ink truncate flex-1 min-w-0">{spec.title}</span>
+        <span className="text-sm text-gray-800 truncate flex-1 min-w-0">{spec.title}</span>
 
         {/* mini timeline — dots only */}
         <div className="hidden md:flex items-center gap-1 shrink-0">
@@ -60,7 +60,7 @@ function SpecRow({ repoId, spec }: { repoId: string; spec: SpecFile }) {
 
         {/* status labels: active stage · gateStatus */}
         <div className="flex items-center gap-2 shrink-0 ml-2">
-          <span className="text-[11px] rounded-full px-2 py-0.5 bg-white/10 text-joule-ink">
+          <span className="text-[11px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-800">
             {STAGE_LABELS[activeStageId]}
           </span>
           <span
