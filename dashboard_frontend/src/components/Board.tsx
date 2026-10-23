@@ -51,24 +51,24 @@ function SpecRow({ repoId, spec }: { repoId: string; spec: SpecFile }) {
 
         <span className="text-sm text-gray-800 truncate flex-1 min-w-0">{spec.title}</span>
 
-        {/* mini timeline — dots only */}
-        <div className="hidden md:flex items-center gap-1 shrink-0">
-          {spec.stages.map((s) => (
-            <StageDot key={s.id} stage={s} active={s.id === activeStageId} />
-          ))}
-        </div>
-
-        {/* status labels: active stage · gateStatus */}
+        {/* status labels: active stage · gate status */}
         <div className="flex items-center gap-2 shrink-0 ml-2">
-          <span className="text-[11px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-800">
+          <span className="text-[11px] rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 font-medium">
             {STAGE_LABELS[activeStageId]}
           </span>
           <span
-            className={`text-[11px] rounded-full px-2 py-0.5 ${GATE_STYLES[activeStage.gate.status]}`}
+            className={`text-[11px] rounded px-2 py-0.5 ${GATE_STYLES[activeStage.gate.status]}`}
             title="Gate status"
           >
             {activeStage.gate.status.replace(/_/g, ' ')}
           </span>
+        </div>
+
+        {/* mini timeline — dots only, rightmost */}
+        <div className="hidden md:flex items-center gap-1 shrink-0 ml-1">
+          {spec.stages.map((s) => (
+            <StageDot key={s.id} stage={s} active={s.id === activeStageId} />
+          ))}
         </div>
       </div>
     </div>
