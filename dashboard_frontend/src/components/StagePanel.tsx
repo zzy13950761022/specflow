@@ -7,11 +7,13 @@ import {
   STAGE_LABELS,
   type Artifact,
   type DeployChecklistArtifact,
+  type InlineAnnotation,
   type OpsReportArtifact,
   type RequirementsData,
   type SpecFile,
   type Stage,
 } from '../types';
+import { AnnotatableMarkdown } from './AnnotatableMarkdown';
 import { DeployChecklistView } from './DeployChecklistView';
 import { DevelopSubtasks } from './DevelopSubtasks';
 import { OpsReportView } from './OpsReportView';
@@ -27,11 +29,17 @@ export function StagePanel({
   ticketId,
   stage,
   spec,
+  annotations,
+  onAnnotationSave,
+  onAnnotationRemove,
 }: {
   repoId: string;
   ticketId: string;
   stage: Stage;
   spec: SpecFile;
+  annotations: InlineAnnotation[];
+  onAnnotationSave: (a: InlineAnnotation) => void;
+  onAnnotationRemove: (id: string) => void;
 }) {
   const [content, setContent] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
@@ -121,6 +129,10 @@ export function StagePanel({
             metrics={markdownMetrics}
             repoId={repoId}
             spec={spec}
+            annotatable={stage.gate.status === 'pending_review'}
+            annotations={annotations}
+            onAnnotationSave={onAnnotationSave}
+            onAnnotationRemove={onAnnotationRemove}
           />
         )}
       </div>
@@ -136,6 +148,10 @@ function StageBody({
   metrics,
   repoId,
   spec,
+  annotatable,
+  annotations,
+  onAnnotationSave,
+  onAnnotationRemove,
 }: {
   stageId: Stage['id'];
   content: string;
@@ -144,6 +160,10 @@ function StageBody({
   metrics?: { stageCoverage?: number; buildSuccess?: boolean; cycleTimeMs?: number };
   repoId: string;
   spec: SpecFile;
+  annotatable: boolean;
+  annotations: InlineAnnotation[];
+  onAnnotationSave: (a: InlineAnnotation) => void;
+  onAnnotationRemove: (id: string) => void;
 }) {
   // Structured artifact kinds take priority over the stage switch.
   if (artifact?.kind === 'deploy-checklist') {
@@ -162,7 +182,13 @@ function StageBody({
     case 'develop':
       return (
         <div className="flex flex-col gap-4">
-          <Markdown content={content} />
+          <MarkdownOrAnnotatable
+            content={content}
+            annotatable={annotatable}
+            annotations={annotations}
+            onAnnotationSave={onAnnotationSave}
+            onAnnotationRemove={onAnnotationRemove}
+          />
           <DevelopSubtasks repoId={repoId} spec={spec} />
         </div>
       );
@@ -177,12 +203,17 @@ function StageBody({
               tone={metrics.stageCoverage >= 0.8 ? 'good' : 'warn'}
             />
           )}
-          <Markdown content={content} />
+          <MarkdownOrAnnotatable
+            content={content}
+            annotatable={annotatable}
+            annotations={annotations}
+            onAnnotationSave={onAnnotationSave}
+            onAnnotationRemove={onAnnotationRemove}
+          />
         </div>
       );
 
     case 'build':
-      // Record-display style: build result as a single record, no advance-gate framing.
       return (
         <div className="flex flex-col gap-4">
           {metrics?.buildSuccess !== undefined && (
@@ -192,7 +223,13 @@ function StageBody({
               tone={metrics.buildSuccess ? 'good' : 'bad'}
             />
           )}
-          <Markdown content={content} />
+          <MarkdownOrAnnotatable
+            content={content}
+            annotatable={annotatable}
+            annotations={annotations}
+            onAnnotationSave={onAnnotationSave}
+            onAnnotationRemove={onAnnotationRemove}
+          />
         </div>
       );
 
@@ -202,8 +239,42 @@ function StageBody({
     case 'deploy':
     case 'ops':
     default:
-      return <Markdown content={content} />;
+      return (
+        <MarkdownOrAnnotatable
+          content={content}
+          annotatable={annotatable}
+          annotations={annotations}
+          onAnnotationSave={onAnnotationSave}
+          onAnnotationRemove={onAnnotationRemove}
+        />
+      );
   }
+}
+
+function MarkdownOrAnnotatable({
+  content,
+  annotatable,
+  annotations,
+  onAnnotationSave,
+  onAnnotationRemove,
+}: {
+  content: string;
+  annotatable: boolean;
+  annotations: InlineAnnotation[];
+  onAnnotationSave: (a: InlineAnnotation) => void;
+  onAnnotationRemove: (id: string) => void;
+}) {
+  if (annotatable) {
+    return (
+      <AnnotatableMarkdown
+        content={content}
+        annotations={annotations}
+        onAnnotationSave={onAnnotationSave}
+        onAnnotationRemove={onAnnotationRemove}
+      />
+    );
+  }
+  return <Markdown content={content} />;
 }
 
 function Markdown({ content }: { content: string }) {

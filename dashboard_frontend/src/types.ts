@@ -137,6 +137,12 @@ export interface SpecFile {
   updatedAt: string;
 }
 
+export interface InlineAnnotation {
+  id: string;
+  selectedText: string;
+  comment: string;
+}
+
 export type TemplateSource = 'repo-curated' | 'repo-draft' | 'blueprint-default';
 
 export interface TemplateSummary {

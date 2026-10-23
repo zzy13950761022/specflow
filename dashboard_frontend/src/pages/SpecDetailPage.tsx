@@ -6,7 +6,7 @@ import { StageTimeline } from '../components/StageTimeline';
 import { StagePanel } from '../components/StagePanel';
 import { useAppState } from '../context/AppContext';
 import { currentStageId, GATE_STYLES } from '../lib/stage';
-import { STAGE_IDS, type SpecFile, type StageId } from '../types';
+import { STAGE_IDS, type InlineAnnotation, type SpecFile, type StageId } from '../types';
 
 export function SpecDetailPage() {
   const { repoId, ticketId } = useParams<{ repoId: string; ticketId: string }>();
@@ -15,6 +15,7 @@ export function SpecDetailPage() {
 
   const [coldSpec, setColdSpec] = useState<SpecFile | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [annotations, setAnnotations] = useState<InlineAnnotation[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Ensure the shared store starts tracking this repo (WS + polling).
@@ -52,6 +53,27 @@ export function SpecDetailPage() {
   useEffect(() => {
     if (selectedStageId) panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [selectedStageId]);
+
+  // Reset inline annotations when the selected stage changes.
+  useEffect(() => {
+    setAnnotations([]);
+  }, [selectedStageId]);
+
+  function handleAnnotationSave(a: InlineAnnotation) {
+    setAnnotations((prev) => {
+      const idx = prev.findIndex((x) => x.id === a.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = a;
+        return next;
+      }
+      return [...prev, a];
+    });
+  }
+
+  function handleAnnotationRemove(id: string) {
+    setAnnotations((prev) => prev.filter((a) => a.id !== id));
+  }
 
   if (loadErr) {
     return (
@@ -99,7 +121,15 @@ export function SpecDetailPage() {
 
       {/* middle: scrollable stage panel */}
       <div ref={panelRef} className="flex-1 overflow-auto">
-        <StagePanel repoId={repoId} ticketId={ticketId} stage={selectedStage} spec={spec} />
+        <StagePanel
+          repoId={repoId}
+          ticketId={ticketId}
+          stage={selectedStage}
+          spec={spec}
+          annotations={annotations}
+          onAnnotationSave={handleAnnotationSave}
+          onAnnotationRemove={handleAnnotationRemove}
+        />
       </div>
 
       {/* bottom: fixed approval bar for the selected stage */}
@@ -110,6 +140,8 @@ export function SpecDetailPage() {
             ticketId={ticketId}
             stageId={selectedStage.id}
             onDone={() => refreshSpecs(repoId)}
+            annotations={annotations}
+            onAnnotationRemove={handleAnnotationRemove}
           />
         ) : (
           <div className="flex items-center gap-2 text-sm text-slate-500">
