@@ -414,11 +414,42 @@ function FileIcon() {
 
 type Accent = 'emerald' | 'purple' | 'blue' | 'amber';
 
-const ACCENTS: Record<Accent, { border: string; dot: string; title: string }> = {
-  emerald: { border: 'border-emerald-400/40', dot: 'bg-emerald-400', title: 'text-emerald-200' },
-  purple: { border: 'border-blue-300', dot: 'bg-blue-500', title: 'text-gray-800' },
-  blue: { border: 'border-blue-200', dot: 'bg-blue-500', title: 'text-blue-600' },
-  amber: { border: 'border-amber-400/40', dot: 'bg-amber-400', title: 'text-amber-200' },
+const ACCENTS: Record<
+  Accent,
+  { border: string; bg: string; dot: string; title: string; badge: string; itemBg: string }
+> = {
+  emerald: {
+    border: 'border-emerald-200',
+    bg: 'bg-emerald-50',
+    dot: 'bg-emerald-500',
+    title: 'text-emerald-800',
+    badge: 'bg-emerald-100 text-emerald-700',
+    itemBg: 'bg-white border border-emerald-100',
+  },
+  purple: {
+    border: 'border-violet-200',
+    bg: 'bg-violet-50',
+    dot: 'bg-violet-500',
+    title: 'text-violet-800',
+    badge: 'bg-violet-100 text-violet-700',
+    itemBg: 'bg-white border border-violet-100',
+  },
+  blue: {
+    border: 'border-blue-200',
+    bg: 'bg-blue-50',
+    dot: 'bg-blue-500',
+    title: 'text-blue-800',
+    badge: 'bg-blue-100 text-blue-700',
+    itemBg: 'bg-white border border-blue-100',
+  },
+  amber: {
+    border: 'border-amber-200',
+    bg: 'bg-amber-50',
+    dot: 'bg-amber-500',
+    title: 'text-amber-800',
+    badge: 'bg-amber-100 text-amber-700',
+    itemBg: 'bg-white border border-amber-100',
+  },
 };
 
 function QuadrantCard({
@@ -432,19 +463,21 @@ function QuadrantCard({
 }) {
   const a = ACCENTS[accent];
   return (
-    <div className={`rounded-xl border bg-white/5 p-4 ${a.border}`}>
-      <div className="mb-3 flex items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${a.dot}`} aria-hidden />
-        <h3 className={`text-sm font-semibold ${a.title}`}>{title}</h3>
-        <span className="ml-auto text-[11px] text-slate-500">{items.length}</span>
+    <div className={`rounded-xl border ${a.border} ${a.bg} p-4 flex flex-col gap-3`}>
+      <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${a.dot}`} aria-hidden />
+        <h3 className={`text-sm font-semibold flex-1 ${a.title}`}>{title}</h3>
+        <span className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${a.badge}`}>
+          {items.length}
+        </span>
       </div>
       {items.length ? (
         <ul className="flex flex-col gap-2">
           {items.map((item, i) => (
-            <li key={i} className="rounded-lg bg-gray-50 px-3 py-2">
-              <div className="text-sm text-gray-800">{item.title}</div>
+            <li key={i} className={`rounded-lg px-3 py-2 ${a.itemBg}`}>
+              <div className="text-sm font-medium text-gray-800">{item.title}</div>
               {item.detail && (
-                <div className="mt-0.5 text-[12px] text-slate-500">{item.detail}</div>
+                <div className="mt-0.5 text-[12px] text-slate-500 leading-relaxed">{item.detail}</div>
               )}
             </li>
           ))}
