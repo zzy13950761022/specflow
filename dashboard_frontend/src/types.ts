@@ -137,10 +137,19 @@ export interface SpecFile {
   updatedAt: string;
 }
 
+export interface AnnotationRangeInfo {
+  startXPath: string;
+  startOffset: number;
+  endXPath: string;
+  endOffset: number;
+}
+
 export interface InlineAnnotation {
   id: string;
   selectedText: string;
   comment: string;
+  rangeInfo?: AnnotationRangeInfo;
+  contextSnippet?: string;
 }
 
 export type TemplateSource = 'repo-curated' | 'repo-draft' | 'blueprint-default';

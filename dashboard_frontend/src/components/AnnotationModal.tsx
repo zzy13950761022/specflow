@@ -85,7 +85,7 @@ export function AnnotationModal({
         />
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2">
           <button
             onClick={handleSave}
             disabled={!comment.trim()}
@@ -102,9 +102,9 @@ export function AnnotationModal({
           </button>
           <button
             onClick={onClose}
-            className="ml-auto text-sm text-slate-500 hover:text-slate-700"
+            className="text-sm text-slate-500 hover:text-slate-700 px-2"
           >
-            Close
+            Cancel
           </button>
         </div>
       </div>

@@ -75,6 +75,7 @@ export function GateActions({
         parts.push('[Inline annotations]');
         annotations.forEach((a, i) => {
           parts.push(`${i + 1}. "${a.selectedText}" → ${a.comment}`);
+          if (a.contextSnippet) parts.push(`   [in: "${a.contextSnippet}"]`);
         });
       }
       if (summary.trim()) {
@@ -109,31 +110,28 @@ export function GateActions({
           </div>
         )}
 
-        {/* Summary textarea + action row */}
-        <div className="flex items-end gap-2">
-          <textarea
+        {/* Summary + action row — all on one line */}
+        <div className="flex items-center gap-2">
+          <input
             autoFocus={annotations.length === 0}
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             placeholder="Overall revision comment (optional)…"
-            rows={2}
-            className="flex-1 bg-gray-100 rounded-lg px-3 py-2 text-sm outline-none border border-blue-200 focus:border-blue-500 resize-none"
+            className="flex-1 bg-gray-100 rounded-lg px-3 py-2 text-sm outline-none border border-blue-200 focus:border-blue-500"
           />
-          <div className="flex flex-col gap-1.5 shrink-0">
-            <button
-              disabled={busy || !canSubmit}
-              className="rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 font-medium disabled:opacity-50"
-              onClick={() => run(() => api.needsRevision(repoId, ticketId, stageId, buildComment()))}
-            >
-              Request revision
-            </button>
-            <button
-              className="rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm px-4 py-2 text-center"
-              onClick={resetMode}
-            >
-              cancel
-            </button>
-          </div>
+          <button
+            disabled={busy || !canSubmit}
+            className="shrink-0 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 font-medium disabled:opacity-50 whitespace-nowrap"
+            onClick={() => run(() => api.needsRevision(repoId, ticketId, stageId, buildComment()))}
+          >
+            Request revision
+          </button>
+          <button
+            className="shrink-0 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm px-4 py-2"
+            onClick={resetMode}
+          >
+            cancel
+          </button>
         </div>
       </div>
     );
