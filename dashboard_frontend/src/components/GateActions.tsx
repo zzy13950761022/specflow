@@ -88,15 +88,15 @@ export function GateActions({
       <div className="flex flex-col gap-3">
         {/* Annotation list */}
         {annotations.length > 0 && (
-          <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
             {annotations.map((a) => (
               <div
                 key={a.id}
-                className="flex items-start gap-2 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 text-sm"
+                className="flex items-start gap-1.5 bg-orange-50 border border-orange-100 rounded-lg px-2.5 py-1.5 text-sm max-w-80 min-w-0"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="italic text-slate-500 text-xs truncate">"{a.selectedText}"</p>
-                  <p className="text-slate-700 mt-0.5">{a.comment}</p>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <p className="italic text-slate-400 text-xs truncate">"{a.selectedText}"</p>
+                  <p className="text-slate-700 text-sm truncate">{a.comment}</p>
                 </div>
                 <button
                   onClick={() => onAnnotationRemove(a.id)}
