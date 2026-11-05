@@ -106,7 +106,7 @@ export function StagePanel({
             <div>
               <p>Nothing generated for this stage yet.</p>
               <p className="text-[11px] mt-1 opacity-70">
-                Claude writes the artifact here once it runs this stage.
+                the AI assistant writes the artifact here once it runs this stage.
               </p>
             </div>
           </div>

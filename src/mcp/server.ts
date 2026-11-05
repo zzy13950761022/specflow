@@ -134,7 +134,7 @@ export function buildMcpServer(app: AppCore): McpServer {
     'propose_repo_templates',
     {
       description:
-        'Gather repo signals (CLAUDE.md, build files, test framework, sample source file) ' +
+        'Gather repo signals (AGENTS.md (or legacy CLAUDE.md), build files, test framework, sample source file; prefer agentsMd over legacy claudeMd) ' +
         'and return a generation brief. Use the brief to draft curated 8-stage templates ' +
         'for this repo, then call write_repo_template for each stage.',
       inputSchema: { repoId: z.string() },
@@ -170,7 +170,7 @@ export function buildMcpServer(app: AppCore): McpServer {
     'record_ai_output',
     {
       description:
-        "Persist Claude's artifact for a stage, mark the AI action done, and " +
+        "Persist the AI assistant's artifact for a stage, mark the AI action done, and " +
         'flip the human gate to pending_review. ' +
         'For REQUIREMENTS stages, supply requirementsData (affectedFiles + reuse/buildFromScratch/dataMigration/integrations) to create a structured requirements artifact the dashboard renders as a tree-table + four-quadrant grid. ' +
         'For DEPLOY stages, supply checklistItems (and optionally rollbackCriteria) to create a structured deploy-checklist artifact. ' +
@@ -299,8 +299,8 @@ export function buildMcpServer(app: AppCore): McpServer {
     'request_revision',
     {
       description:
-        'Third gate verdict: ask Claude to revise the output without fully rejecting it. ' +
-        'Sets gate to needs_revision and aiStatus to in_progress so Claude can re-record. ' +
+        'Third gate verdict: ask the AI assistant to revise the output without fully rejecting it. ' +
+        'Sets gate to needs_revision and aiStatus to in_progress so the AI assistant can re-record. ' +
         'advance_stage is still refused until the gate is approved.',
       inputSchema: {
         repoId: z.string(),

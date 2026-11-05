@@ -1,7 +1,11 @@
 # AI Pilot
+## OpenCode installation
+
+Use [the branch setup guide](../../config/README.md) for skill discovery, dependency installation, environment files, and the complete three-server client configuration. All launch paths must refer to this checkout. The configuration examples below describe individual servers; merge them into your client configuration rather than replacing unrelated settings.
+
 
 A local platform for **AI-assisted software development** across an 8-stage workflow,
-driven by Claude Code over MCP. Every stage has a human approval gate — Claude assists,
+driven by OpenCode over MCP. Every stage has a human approval gate — OpenCode assists,
 humans review and own outcomes.
 
 ```
@@ -12,11 +16,11 @@ SPEC → REQUIREMENTS → DESIGN → DEVELOP → TEST → BUILD → DEPLOY → O
 
 ## Quick start
 
-**Prerequisites:** Node.js 20+, Claude Code CLI
+**Prerequisites:** Node.js 20+, OpenCode CLI
 
 ```bash
 git clone <this-repo>
-cd ai-pilot
+cd Giant-Panda-AI-Tools/mcp/ai-pilot
 npm install
 npm run build
 ```
@@ -28,24 +32,29 @@ node dist/index.js --dashboard
 # Opens at http://127.0.0.1:4123
 ```
 
-**2. Register the MCP server** in your project repo's `.mcp.json`:
+**2. Register the MCP server** in your project repo's `opencode.json`:
 
 ```json
 {
-  "mcpServers": {
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
     "ai-pilot": {
-      "command": "node",
-      "args": ["/absolute/path/to/ai-pilot/dist/index.js"]
+      "type": "local",
+      "command": [
+        "node",
+        "<REPO_ROOT>/mcp/ai-pilot/dist/index.js"
+      ],
+      "enabled": true
     }
   }
 }
 ```
 
-**3. Open Claude Code** inside your project repo and say:
+**3. Open OpenCode** inside your project repo and say:
 
 > "Create a spec for TICKET-123 — Add coupon discount to the shopping cart"
 
-Claude will run the full 8-stage workflow. After each stage it waits for your approval
+OpenCode will run the full 8-stage workflow. After each stage it waits for your approval
 in the dashboard before continuing.
 
 ---
@@ -56,7 +65,7 @@ One Node process, two transports, one shared core:
 
 | Component | Role |
 |-----------|------|
-| **MCP server** (stdio) | Claude Code connects here and calls tools |
+| **MCP server** (stdio) | OpenCode connects here and calls tools |
 | **Dashboard** (Fastify + React, `127.0.0.1:4123`) | Human reviews and approves/rejects each stage |
 | **AppCore** | Shared singleton — every mutation flows `mutate → persist → emit` |
 
@@ -88,21 +97,21 @@ gate:       not_ready   → pending_review → approved
 
 The dashboard offers three verdicts when reviewing:
 - **Approve** — advance to the next stage
-- **Revise** — minor changes needed; Claude re-generates with your comment
-- **Reject** — direction is wrong; Claude re-generates with your comment
+- **Revise** — minor changes needed; OpenCode re-generates with your comment
+- **Reject** — direction is wrong; OpenCode re-generates with your comment
 
 ### Develop stage — two-phase flow
 
 The develop stage has an explicit plan-before-code structure:
 
-1. **Phase A (gated)** — Claude generates a task list and implementation plan, submits
+1. **Phase A (gated)** — OpenCode generates a task list and implementation plan, submits
    via `record_ai_output`. You review and approve in the dashboard.
-2. **Phase B (no extra gate)** — Claude implements each subtask with Write/Edit tools,
+2. **Phase B (no extra gate)** — OpenCode implements each subtask with Write/Edit tools,
    then calls `log_implementation` (mandatory) to record what was built before marking
    the subtask done.
 
 Implementation logs (`.specflow/impl-logs/`) feed context into the test and build stages
-so Claude knows exactly what was created without re-reading the whole codebase.
+so OpenCode knows exactly what was created without re-reading the whole codebase.
 
 ### Per-repo prompt templates
 
@@ -156,7 +165,7 @@ After any code change:
 
 ```bash
 npm run build           # Recompile dist/index.js
-# Then restart the MCP server (reload Claude Code or run /mcp)
+# Then restart the MCP server (restart OpenCode after changing the launch configuration)
 ```
 
 ### Architecture invariants

@@ -14,6 +14,8 @@ export interface RepoBrief {
   repoPath: string;
   buildTool: BuildTool;
   testFramework: string;
+  agentsMd: string | null;
+  /** Legacy context retained for existing MCP consumers. Prefer agentsMd when available. */
   claudeMd: string | null;
   sampleFile: SampleFile | null;
   blueprintDefaults: BlueprintDefaults;
@@ -133,13 +135,14 @@ async function findSampleFile(repoPath: string, buildTool: BuildTool): Promise<S
 }
 
 /**
- * Inspect a repo and return a structured brief that a Claude agent uses to
+ * Inspect a repo and return a structured brief that an AI assistant agent uses to
  * produce curated 8-stage prompt templates. Pure/async — no side effects.
  */
 export async function introspectRepo(repoPath: string): Promise<RepoBrief> {
   const buildTool = await detectBuildTool(repoPath);
-  const [testFramework, claudeMd, sampleFile] = await Promise.all([
+  const [testFramework, agentsMd, claudeMd, sampleFile] = await Promise.all([
     detectTestFramework(repoPath, buildTool),
+    readOptional(join(repoPath, 'AGENTS.md')),
     readOptional(join(repoPath, 'CLAUDE.md')),
     findSampleFile(repoPath, buildTool),
   ]);
@@ -148,6 +151,7 @@ export async function introspectRepo(repoPath: string): Promise<RepoBrief> {
     repoPath,
     buildTool,
     testFramework,
+    agentsMd,
     claudeMd,
     sampleFile,
     blueprintDefaults: BLUEPRINT_DEFAULTS,

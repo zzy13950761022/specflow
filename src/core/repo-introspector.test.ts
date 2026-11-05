@@ -126,6 +126,19 @@ describe('introspectRepo — sample source file', () => {
   });
 });
 
+describe('introspectRepo — AGENTS.md', () => {
+  it('includes native agent instructions while retaining legacy context', async () => {
+    await fs.writeFile(join(repo, 'AGENTS.md'), 'Use native agent conventions.', 'utf-8');
+    await fs.writeFile(join(repo, 'CLAUDE.md'), 'Legacy instructions.', 'utf-8');
+    const brief = await introspectRepo(repo);
+    expect(brief.agentsMd).toBe('Use native agent conventions.');
+    expect(brief.claudeMd).toBe('Legacy instructions.');
+  });
+  it('uses null when native instructions are absent', async () => {
+    const brief = await introspectRepo(repo);
+    expect(brief.agentsMd).toBeNull();
+  });
+});
 describe('introspectRepo — RepoBrief shape', () => {
   it('returns all required fields', async () => {
     const brief: RepoBrief = await introspectRepo(repo);
@@ -133,6 +146,7 @@ describe('introspectRepo — RepoBrief shape', () => {
     expect(brief).toHaveProperty('buildTool');
     expect(brief).toHaveProperty('testFramework');
     expect(brief).toHaveProperty('claudeMd');
+    expect(brief).toHaveProperty('agentsMd');
     expect(brief).toHaveProperty('sampleFile');
     expect(brief).toHaveProperty('blueprintDefaults');
   });
