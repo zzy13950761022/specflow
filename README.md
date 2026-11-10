@@ -271,6 +271,90 @@ Installer tests: `python3 -m unittest discover -s tests/skills -p test_install_s
 Behavioral evaluation scenarios are in `tests/skills/specflow-scenarios.json`; run
 them as simulated skill applications without operating on live tickets.
 
+## Personal and team repository synchronization
+
+The standalone repository and the team's `mcp/ai-pilot` directory use two-way Git
+subtree merges. Teammates work and commit normally in the monorepo; the maintainer
+handles synchronization. A personal GitHub remote and a team GitHub remote can be
+used independently. The maintained Specflow skill travels with the component at
+`skills/specflow`; changing the team's top-level skill entry point requires a
+separate review of its platform conventions.
+
+```bash
+python3 scripts/sync-ai-pilot.py status
+python3 scripts/sync-ai-pilot.py import # Team → standalone preview
+scripts/sync-to-gp.sh                  # Standalone → team preview
+```
+
+Defaults are this checkout and `~/Project/Giant-Panda-AI-Tools-main`, with prefix
+`mcp/ai-pilot`. Override with `--source`, `--team`, `--prefix`, `--source-ref` and
+`--team-ref`. The tool uses local committed refs; fetch the relevant remote
+branches first and select the intended refs. Status compares committed trees and
+reports dirty working trees separately. It does not include uncommitted features.
+
+For the first synchronization, establish shared ancestry from **reviewed historical
+bases**. In these local checkouts, `a837ec2` is a candidate team base and `4721fc1`
+is the corresponding standalone commit. Their trees differ, so review baseline
+conflicts rather than treating these commits as identical. Select a source base
+that precedes the changes you intend to merge:
+
+```bash
+python3 scripts/sync-ai-pilot.py bootstrap \
+  --source-base 4721fc1 --team-base a837ec2 \
+  --workspace /tmp/ai-pilot-bootstrap --apply
+```
+
+Both input checkouts must be clean before `--apply`; review and commit intended
+changes first, leaving private local configuration out of Git. The operation
+creates isolated clones and a `codex/ai-pilot-*` result branch. Input checkouts
+remain untouched. Only tracked committed content is merged; already tracked
+configuration is still tracked and must be reviewed. No automatic push occurs.
+
+If JSON reports `status: conflict` (exit 2), resolve the listed files in
+`result.repo`, stage them with `git add`, then run:
+
+```bash
+python3 scripts/sync-ai-pilot.py continue \
+  --workspace /tmp/ai-pilot-bootstrap --apply
+```
+
+Unresolved conflicts remain paused. `operation.json` records source/team/split
+SHAs, merge steps and the result SHA. Keep this workspace until the result is
+reviewed and integrated. Output clones have local input repos as their `origin`,
+so publish to the appropriate remote explicitly. Retain the merge history:
+**squashing or cherry-picking a sync result loses ancestry needed by later syncs.**
+For example, after reviewing the standalone result:
+
+```bash
+# In the original standalone checkout; replace RESULT_BRANCH from JSON.
+git fetch /tmp/ai-pilot-bootstrap/source RESULT_BRANCH
+git switch -c codex/review-ai-pilot-sync FETCH_HEAD
+# Review and test this branch, then publish it explicitly for a merge PR.
+```
+
+After integrating the bootstrap result into the standalone branch, use incremental
+operations with new workspace paths:
+
+```bash
+python3 scripts/sync-ai-pilot.py import --workspace /tmp/ai-pilot-import --apply
+python3 scripts/sync-ai-pilot.py export --workspace /tmp/ai-pilot-export --apply
+```
+
+Review and integrate the import result before exporting it (or pass its clone as
+`--source`). Review the export branch in the team clone before publishing a team
+PR. Export preserves files outside the prefix and can incorporate concurrent
+team edits. `needsFollowupImport: true` means those team changes still need to be
+imported into standalone; it does not discard them to force equality. Fetch and
+merge newer target changes and rerun relevant tests before publication.
+
+Use `status --require-equal` as a release/CI check: exit 1 means the selected
+committed trees differ. Two independent repos are synchronized at recorded SHAs,
+not atomically or continuously. To cancel a conflicted operation, leave the
+original repos alone and discard its temporary workspace when no longer needed.
+
+Sync regression tests: `python3 -m unittest discover -s tests/sync -p 'test_*.py'`.
+Design: [repository sync spec](docs/superpowers/specs/2026-11-10-repository-sync-design.md).
+
 ## MCP tools reference
 
 | Tool | Description |
