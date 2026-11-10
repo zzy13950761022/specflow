@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ai-pilot": {
+      "command": "node",
+      "args": ["/Users/I605217/ai-pilot/dist/index.js"]
+    }
+  }
+}
