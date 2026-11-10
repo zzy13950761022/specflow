@@ -45,8 +45,11 @@ describe('MCP stdout hygiene', () => {
       }) + '\n';
     child.stdin.write(initialize);
 
-    // Let it respond, then terminate.
-    await new Promise((r) => setTimeout(r, 800));
+    // Wait for the response rather than assuming process startup takes <800ms.
+    const deadline = Date.now() + 4000;
+    while (!stdout.includes('\n') && child.exitCode === null && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     child.kill('SIGTERM');
     await new Promise((r) => child.on('exit', r));
     await fs.rm(home, { recursive: true, force: true });

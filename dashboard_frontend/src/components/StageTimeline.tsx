@@ -2,6 +2,7 @@ import { GATE_STYLES } from '../lib/stage';
 import { STAGE_LABELS, type SpecFile, type Stage, type StageId } from '../types';
 
 export function StageDot({ stage, active }: { stage: Stage; active: boolean }) {
+  if (stage.skipped) return <span className="w-2 h-2 rounded-full border border-slate-300" title={stage.skipReason} />;
   const isApproved = stage.gate.status === 'approved';
   const isPending = stage.gate.status === 'pending_review';
   const isRejected = stage.gate.status === 'rejected' || stage.gate.status === 'needs_revision';
@@ -63,18 +64,21 @@ export function StageTimeline({
               <div className="flex flex-col items-center w-20">
                 <button
                   onClick={() => onSelectStage(stage.id)}
+                  aria-label={'Select ' + STAGE_LABELS[stage.id]}
                   title={`Select ${STAGE_LABELS[stage.id]}`}
                   className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition ${nodeColor} ${
                     isSelected ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-white' : ''
                   } hover:scale-110 cursor-pointer`}
                 >
-                  {isApproved ? '✓' : isRejected ? '✗' : isRevision ? '↩' : isPending ? '…' : i + 1}
+                  {stage.skipped ? '−' : stage.stale ? '↩' : isApproved ? '✓' : isRejected ? '✗' : isRevision ? '↩' : isPending ? '…' : i + 1}
                 </button>
                 <span
                   className={`text-[10px] mt-1 text-center leading-tight ${isFuture ? 'text-slate-400' : isSelected ? 'text-gray-800 font-semibold' : isActive ? 'text-gray-800' : 'text-slate-500'}`}
                 >
                   {STAGE_LABELS[stage.id]}
                 </span>
+                {stage.skipped && <span className="text-[10px] text-slate-400" title={stage.skipReason}>skipped</span>}
+                {stage.stale && <span className="text-[10px] text-orange-600">outdated</span>}
                 {isActive && (
                   <span
                     className={`text-[10px] mt-0.5 rounded-full px-1.5 py-px text-center ${GATE_STYLES[stage.gate.status]}`}

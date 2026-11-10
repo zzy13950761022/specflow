@@ -28,6 +28,8 @@ export class ImplLogStore {
     ticketId: string,
     subtaskId: string,
     input: {
+      developRevision?: number;
+      taskAttempt?: number;
       summary: string;
       filesModified: string[];
       filesCreated: string[];
@@ -42,6 +44,8 @@ export class ImplLogStore {
       id,
       ticketId,
       subtaskId,
+      developRevision: input.developRevision,
+      taskAttempt: input.taskAttempt,
       summary: input.summary,
       filesModified: input.filesModified,
       filesCreated: input.filesCreated,
@@ -123,6 +127,8 @@ export class ImplLogStore {
 **Timestamp:** ${log.createdAt}
 **Log ID:** ${log.id}
 **Ticket:** ${log.ticketId}
+**Develop Revision:** ${log.developRevision ?? 0}
+**Task Attempt:** ${log.taskAttempt ?? 0}
 
 ---
 
@@ -161,6 +167,8 @@ ${sections.length ? sections.join('\n\n') : '_No artifacts recorded_'}
       const filesCreated = createdSection.match(/^- (.+)$/gm)?.map((l) => l.slice(2)) ?? [];
 
       const log: ImplementationLog = {
+        developRevision: Number(raw.match(/[*][*]Develop Revision:[*][*] (\d+)/)?.[1] ?? 0),
+        taskAttempt: Number(raw.match(/[*][*]Task Attempt:[*][*] ([0-9]+)/)?.[1] ?? 0),
         id, ticketId, subtaskId, summary, createdAt,
         filesModified, filesCreated,
         statistics: { linesAdded, linesRemoved },

@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AppCore } from '../core/app-core.js';
 import { buildMcpServer } from './server.js';
+import { prepareStage, prepareImplementation, recordTaskLog } from '../test-support/workflow-fixtures.js';
 
 let home: string;
 let repo: string;
@@ -48,6 +49,9 @@ describe('MCP server exposes the tool set', () => {
     expect(names).toEqual(
       [
         'advance_stage',
+        'reopen_stage', 'run_stage_check', 'get_stage_context', 'get_traceability',
+        'get_execution_status', 'get_next_actions', 'pause_execution', 'resume_execution',
+        'claim_subtask', 'release_subtask', 'set_subtask_completed',
         'create_spec',
         'get_approval_status',
         'get_implementation_logs',
@@ -68,6 +72,15 @@ describe('MCP server exposes the tool set', () => {
 });
 
 describe('MCP tools drive real state on disk', () => {
+  it('exposes workflow selection and rework with execution status', async () => {
+    const created = parse(await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'WF-1', title: 'Fix', workflowKind: 'bugfix' } }));
+    expect(created.spec.workflow.workflowKind).toBe('bugfix');
+    await client.callTool({ name: 'record_ai_output', arguments: { repoId, ticketId: 'WF-1', stageId: 'spec', content: 'Initial' } });
+    const reopened = parse(await client.callTool({ name: 'reopen_stage', arguments: { repoId, ticketId: 'WF-1', stageId: 'spec', reason: 'Acceptance changed' } }));
+    expect(reopened.stages[0].stale).toBe(true);
+    const execution = parse(await client.callTool({ name: 'get_execution_status', arguments: { repoId, ticketId: 'WF-1' } }));
+    expect(execution.actions[0].tool).toBe('get_stage_prompt');
+  });
   it('create_spec via MCP writes the spec json', async () => {
     await client.callTool({
       name: 'create_spec',
@@ -85,7 +98,7 @@ describe('MCP tools drive real state on disk', () => {
       name: 'record_ai_output',
       arguments: { repoId, ticketId: 'ABC-1', stageId: 'spec', content: '# body' },
     });
-    const spec = await fs.readFile(join(repo, 'specs', 'ABC-1.md'), 'utf-8');
+    const spec = await fs.readFile(join(repo, '.specflow', 'specs', 'ABC-1-x.md'), 'utf-8');
     expect(spec).toBe('# body');
     expect(events).toContain('spec.updated');
   });
@@ -124,7 +137,7 @@ describe('MCP get_approval_status nextSteps guidance', () => {
     });
     const res: any = await client.callTool({
       name: 'get_approval_status',
-      arguments: { repoId, ticketId: 'NS-1', stageId: 'spec' },
+      arguments: { repoId, ticketId: 'NS-1', stageId: 'spec', waitMs: 0 },
     });
     const payload = parse(res);
     expect(payload.gate.status).toBe('pending_review');
@@ -236,6 +249,7 @@ describe('MCP propose_repo_templates', () => {
 describe('MCP write_repo_template', () => {
   it('persists the template and get_stage_prompt returns it over blueprint default', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'T-1', title: 'x' } });
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
 
     await client.callTool({
       name: 'write_repo_template',
@@ -269,6 +283,7 @@ describe('MCP get_stage_prompt', () => {
 describe('MCP set_develop_subtasks and toggle_subtask (Phase 3)', () => {
   it('set_develop_subtasks creates the subtask list', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'T-1', title: 'x' } });
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
     const res: any = await client.callTool({
       name: 'set_develop_subtasks',
       arguments: {
@@ -286,12 +301,15 @@ describe('MCP set_develop_subtasks and toggle_subtask (Phase 3)', () => {
 
   it('toggle_subtask flips the task completed flag', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'T-1', title: 'x' } });
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
     const setRes: any = await client.callTool({
       name: 'set_develop_subtasks',
       arguments: { repoId, ticketId: 'T-1', subtasks: [{ description: 'Do it' }] },
     });
+    await prepareImplementation(app, repoId, 'T-1');
     const subtaskId = parse(setRes).stages.find((s: any) => s.id === 'develop').subtasks[0].id;
 
+    await recordTaskLog(app, repoId, 'T-1', subtaskId);
     const toggleRes: any = await client.callTool({
       name: 'toggle_subtask',
       arguments: { repoId, ticketId: 'T-1', subtaskId },
@@ -304,6 +322,7 @@ describe('MCP set_develop_subtasks and toggle_subtask (Phase 3)', () => {
 
   it('toggle_subtask returns an error for an unknown subtask id', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'T-1', title: 'x' } });
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
     const res: any = await client.callTool({
       name: 'toggle_subtask',
       arguments: { repoId, ticketId: 'T-1', subtaskId: 'nonexistent-uuid' },
@@ -384,10 +403,12 @@ describe('MCP log_implementation and get_implementation_logs', () => {
 
   it('log_implementation writes a log and returns logId + nextSteps', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'IL-1', title: 'x' } });
+    await prepareStage(app, repo, repoId, 'IL-1', 'develop');
     const setRes: any = await client.callTool({
       name: 'set_develop_subtasks',
       arguments: { repoId, ticketId: 'IL-1', subtasks: [{ description: 'Implement deduction' }] },
     });
+    await prepareImplementation(app, repoId, 'IL-1');
     const subtaskId = parse(setRes).stages.find((s: any) => s.id === 'develop').subtasks[0].id;
 
     const res: any = await client.callTool({
@@ -398,15 +419,17 @@ describe('MCP log_implementation and get_implementation_logs', () => {
     const payload = parse(res);
     expect(payload.ok).toBe(true);
     expect(payload.logId).toBeTruthy();
-    expect(payload.nextSteps[0]).toMatch(/toggle_subtask/i);
+    expect(payload.nextSteps[0]).toMatch(/set_subtask_completed/i);
   });
 
   it('get_implementation_logs returns the written log', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'IL-2', title: 'x' } });
+    await prepareStage(app, repo, repoId, 'IL-2', 'develop');
     const setRes: any = await client.callTool({
       name: 'set_develop_subtasks',
       arguments: { repoId, ticketId: 'IL-2', subtasks: [{ description: 'Do something' }] },
     });
+    await prepareImplementation(app, repoId, 'IL-2');
     const subtaskId = parse(setRes).stages.find((s: any) => s.id === 'develop').subtasks[0].id;
     await client.callTool({
       name: 'log_implementation',
@@ -426,10 +449,12 @@ describe('MCP log_implementation and get_implementation_logs', () => {
 
   it('get_implementation_logs filters by subtaskId', async () => {
     await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'IL-3', title: 'x' } });
+    await prepareStage(app, repo, repoId, 'IL-3', 'develop');
     const setRes: any = await client.callTool({
       name: 'set_develop_subtasks',
       arguments: { repoId, ticketId: 'IL-3', subtasks: [{ description: 'A' }, { description: 'B' }] },
     });
+    await prepareImplementation(app, repoId, 'IL-3');
     const subtasks = parse(setRes).stages.find((s: any) => s.id === 'develop').subtasks;
     // log only for first subtask
     await client.callTool({

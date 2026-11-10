@@ -7,7 +7,7 @@ import { z } from 'zod';
  * all agree on one shape.
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** The eight stages, in fixed order. Index == position on the board. */
 export const STAGE_IDS = [
@@ -54,6 +54,8 @@ export const GateSchema = z.object({
   status: GateStatusSchema,
   comment: z.string().optional(),
   reviewedAt: z.string().optional(),
+  approvedRevision: z.number().int().optional(),
+  actor: z.enum(['human', 'policy']).optional(),
 });
 export type Gate = z.infer<typeof GateSchema>;
 
@@ -66,10 +68,22 @@ export const SubtaskSchema = z.object({
   prompt: z.string().optional(),
   /** Traceability back to a requirement artifact reference. */
   requirementRef: z.string().optional(),
+  testRefs: z.array(z.string()).default([]),
+  dependsOn: z.array(z.string()).default([]),
+  files: z.array(z.string()).default([]),
+  status: z.enum(['pending', 'running', 'done']).default('pending'),
+  claimId: z.string().optional(),
+  attempt: z.number().int().min(0).default(0),
   /** Existing files/utilities Claude should reuse when implementing this task. */
   leverage: z.array(z.string()).optional(),
 });
 export type Subtask = z.infer<typeof SubtaskSchema>;
+export const SubtaskInputSchema = z.object({
+  id: z.string().min(1).optional(), description: z.string().min(1), prompt: z.string().optional(),
+  requirementRef: z.string().optional(), leverage: z.array(z.string()).optional(), testRefs: z.array(z.string()).optional(),
+  dependsOn: z.array(z.string()).optional(), files: z.array(z.string()).optional(),
+});
+export type SubtaskInput = z.infer<typeof SubtaskInputSchema>;
 
 /** A single implementation log entry written after a subtask is coded. */
 export const ImplArtifactsSchema = z.object({
@@ -116,6 +130,8 @@ export const ImplementationLogSchema = z.object({
   id: z.string(),
   ticketId: z.string(),
   subtaskId: z.string(),
+  developRevision: z.number().int().optional(),
+  taskAttempt: z.number().int().optional(),
   summary: z.string(),
   filesModified: z.array(z.string()),
   filesCreated: z.array(z.string()),
@@ -283,8 +299,23 @@ export type ArtifactInput =
       data: RequirementsData;
     };
 
+export const CheckEvidenceSchema = z.object({
+  runId: z.string(), stageId: z.enum(['test', 'build']), command: z.string(), args: z.array(z.string()),
+  exitCode: z.number().nullable(), startedAt: z.string(), finishedAt: z.string(),
+  codeFingerprint: z.string(), codeChanged: z.boolean(), timedOut: z.boolean(), outputTruncated: z.boolean(),
+  outputPath: z.string(), coverage: z.number().min(0).max(1).optional(),
+});
+export type CheckEvidence = z.infer<typeof CheckEvidenceSchema>;
+
 export const StageSchema = z.object({
   id: StageIdSchema,
+  revision: z.number().int().min(0).default(0),
+  stale: z.boolean().default(false),
+  staleReason: z.string().optional(),
+  evidence: CheckEvidenceSchema.optional(),
+  activeCheck: z.object({ runId: z.string(), pid: z.number(), revision: z.number() }).optional(),
+  skipped: z.boolean().default(false),
+  skipReason: z.string().optional(),
   aiStatus: AiStatusSchema,
   aiCapability: AiCapabilitySchema,
   gate: GateSchema,
@@ -297,7 +328,7 @@ export const StageSchema = z.object({
   // Timestamped copies of every AI output recorded for this stage, oldest first.
   // Feeds a future snapshot/diff view; writing is cheap, querying comes later.
   artifactHistory: z
-    .array(z.object({ path: z.string(), at: z.string() }))
+    .array(z.object({ path: z.string(), at: z.string(), revision: z.number().optional(), artifact: ArtifactSchema.optional() }))
     .optional(),
   /** Only meaningful for the 'develop' stage; placeholder in v1. */
   subtasks: z.array(SubtaskSchema).optional(),
@@ -306,20 +337,40 @@ export type Stage = z.infer<typeof StageSchema>;
 
 export const GateHistoryEntrySchema = z.object({
   stageId: StageIdSchema,
+  revision: z.number().int().optional(),
   from: GateStatusSchema,
   to: GateStatusSchema,
   comment: z.string().optional(),
   at: z.string(),
+  actor: z.enum(['human', 'policy']).optional(),
 });
 export type GateHistoryEntry = z.infer<typeof GateHistoryEntrySchema>;
+
+export const WorkflowOptionsSchema = z.object({
+  workflowKind: z.enum(['standard', 'bugfix', 'documentation']).default('standard'),
+  risk: z.enum(['low', 'normal', 'high']).default('normal'),
+  autoChecks: z.boolean().default(false),
+});
+export type WorkflowOptions = z.input<typeof WorkflowOptionsSchema>;
 
 export const SpecFileSchema = z.object({
   schemaVersion: z.number(),
   ticketId: z.string(),
   title: z.string(),
   specPath: z.string(),
-  stages: z.array(StageSchema).length(STAGE_IDS.length),
+  currentStageId: StageIdSchema.default('spec'),
+  legacyCompletion: z.object({
+    sourceSchemaVersion: z.literal(2), completedAt: z.string(), restoredAt: z.string(),
+  }).optional(),
+  acceptanceCriteria: z.array(z.object({ id: z.string().min(1), given: z.string().min(1), when: z.string().min(1), then: z.string().min(1) })).default([]),
+  workflow: WorkflowOptionsSchema.default({}),
+  execution: z.object({
+    status: z.enum(['ready', 'running', 'waiting_review', 'failed', 'paused', 'completed']).default('ready'),
+    retryCount: z.number().int().min(0).default(0), lastSuccessfulStep: z.string().optional(), error: z.string().optional(),
+  }).default({}),
+  stages: z.array(StageSchema).length(STAGE_IDS.length).refine((stages) => stages.every((stage, index) => stage.id === STAGE_IDS[index]), 'Stages must match the canonical stage order.'),
   gateHistory: z.array(GateHistoryEntrySchema),
+  reworkHistory: z.array(z.object({ stageId: StageIdSchema, reason: z.string(), at: z.string() })).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

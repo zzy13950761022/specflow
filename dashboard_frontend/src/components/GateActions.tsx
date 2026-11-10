@@ -6,22 +6,28 @@ export function GateActions({
   repoId,
   ticketId,
   stageId,
+  revision,
   onDone,
 }: {
   repoId: string;
   ticketId: string;
   stageId: StageId;
+  revision: number;
   onDone?: () => void;
 }) {
   const [mode, setMode] = useState<'normal' | 'rejecting' | 'revising'>('normal');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
+    setError(null);
     try {
       await action();
       onDone?.();
+    } catch (error) {
+      setError(String((error as Error).message));
     } finally {
       setBusy(false);
     }
@@ -36,6 +42,7 @@ export function GateActions({
     const isReject = mode === 'rejecting';
     return (
       <div className="flex flex-col gap-2">
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         <input
           autoFocus
           value={comment}
@@ -45,15 +52,15 @@ export function GateActions({
         />
         <div className="flex gap-2">
           <button
-            disabled={busy}
+            disabled={busy || !comment.trim()}
             className={`flex-1 rounded-lg text-white text-sm py-2 disabled:opacity-60 ${
               isReject ? 'bg-red-500/80' : 'bg-orange-500/80'
             }`}
             onClick={() =>
               run(() =>
                 isReject
-                  ? api.reject(repoId, ticketId, stageId, comment)
-                  : api.needsRevision(repoId, ticketId, stageId, comment)
+                  ? api.reject(repoId, ticketId, stageId, comment, revision)
+                  : api.needsRevision(repoId, ticketId, stageId, comment, revision)
               )
             }
           >
@@ -68,11 +75,12 @@ export function GateActions({
   }
 
   return (
-    <div className="flex gap-2 justify-end">
+    <div className="flex gap-2 justify-end flex-wrap">
+      {error && <p role="alert" className="w-full text-sm text-red-600">{error}</p>}
       <button
         disabled={busy}
         className="rounded-lg joule-gradient text-white text-sm px-5 py-2 font-medium disabled:opacity-60"
-        onClick={() => run(() => api.approve(repoId, ticketId, stageId))}
+        onClick={() => run(() => api.approve(repoId, ticketId, stageId, revision))}
       >
         Approve
       </button>

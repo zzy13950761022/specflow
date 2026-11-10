@@ -4,6 +4,7 @@ import { api } from '../api';
 import { GateActions } from '../components/GateActions';
 import { StageTimeline } from '../components/StageTimeline';
 import { StagePanel } from '../components/StagePanel';
+import { WorkflowControls } from '../components/WorkflowControls';
 import { useAppState } from '../context/AppContext';
 import { currentStageId, GATE_STYLES } from '../lib/stage';
 import { STAGE_IDS, type SpecFile, type StageId } from '../types';
@@ -15,6 +16,7 @@ export function SpecDetailPage() {
 
   const [coldSpec, setColdSpec] = useState<SpecFile | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [review, setReview] = useState<{ stageId: StageId; revision: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Ensure the shared store starts tracking this repo (WS + polling).
@@ -88,6 +90,7 @@ export function SpecDetailPage() {
       </div>
 
       {/* top: timeline */}
+      <WorkflowControls repoId={repoId} spec={spec} stage={selectedStage} onDone={() => refreshSpecs(repoId)} />
       <div className="glass rounded-2xl px-4 py-3 shrink-0">
         <StageTimeline
           spec={spec}
@@ -99,16 +102,17 @@ export function SpecDetailPage() {
 
       {/* middle: scrollable stage panel */}
       <div ref={panelRef} className="flex-1 overflow-auto">
-        <StagePanel repoId={repoId} ticketId={ticketId} stage={selectedStage} spec={spec} />
+        <StagePanel repoId={repoId} ticketId={ticketId} stage={selectedStage} spec={spec} onReviewReady={setReview} />
       </div>
 
       {/* bottom: fixed approval bar for the selected stage */}
       <div className="glass rounded-2xl px-5 py-3 shrink-0">
-        {selectedStage.gate.status === 'pending_review' ? (
+        {selectedStage.gate.status === 'pending_review' && review?.stageId === selectedStage.id && review.revision === selectedStage.revision ? (
           <GateActions
             repoId={repoId}
             ticketId={ticketId}
             stageId={selectedStage.id}
+            revision={review.revision}
             onDone={() => refreshSpecs(repoId)}
           />
         ) : (

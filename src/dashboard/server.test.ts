@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { WebSocket } from 'ws';
 import { AppCore } from '../core/app-core.js';
 import { buildDashboard, startDashboard } from './server.js';
+import { prepareStage, prepareImplementation, recordTaskLog } from '../test-support/workflow-fixtures.js';
 
 let home: string;
 let repo: string;
@@ -65,7 +66,7 @@ describe('Dashboard REST', () => {
     const res = await fastify.inject({
       method: 'POST',
       url: `/api/repos/${repoId}/specs/ABC-1/approve`,
-      payload: { stageId: 'spec' },
+      payload: { stageId: 'spec', expectedRevision: 1 },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().stages[0].gate.status).toBe('approved');
@@ -77,7 +78,7 @@ describe('Dashboard REST', () => {
     const res = await fastify.inject({
       method: 'POST',
       url: `/api/repos/${repoId}/specs/ABC-1/reject`,
-      payload: { stageId: 'spec', comment: 'needs detail' },
+      payload: { stageId: 'spec', expectedRevision: 1, comment: 'needs detail' },
     });
     expect(res.json().stages[0].gate.status).toBe('rejected');
     expect(res.json().stages[0].gate.comment).toBe('needs detail');
@@ -161,6 +162,7 @@ describe('Dashboard WebSocket live fan-out', () => {
 describe('Dashboard subtask endpoints (Phase 3)', () => {
   it('PUT .../develop/subtasks sets the list and returns updated spec', async () => {
     await app.createSpec(repoId, 'T-1', 'Feature');
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
     const res = await fastify.inject({
       method: 'PUT',
       url: `/api/repos/${repoId}/specs/T-1/develop/subtasks`,
@@ -176,6 +178,7 @@ describe('Dashboard subtask endpoints (Phase 3)', () => {
 
   it('PUT .../develop/subtasks requires subtasks array', async () => {
     await app.createSpec(repoId, 'T-1', 'x');
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
     const res = await fastify.inject({
       method: 'PUT',
       url: `/api/repos/${repoId}/specs/T-1/develop/subtasks`,
@@ -186,9 +189,12 @@ describe('Dashboard subtask endpoints (Phase 3)', () => {
 
   it('PATCH .../develop/subtasks/:id/toggle flips the task', async () => {
     await app.createSpec(repoId, 'T-1', 'Feature');
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
     const spec = await app.setDevelopSubtasks(repoId, 'T-1', [{ description: 'Do it' }]);
+    await prepareImplementation(app, repoId, 'T-1');
     const subtaskId = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
 
+    await recordTaskLog(app, repoId, 'T-1', subtaskId);
     const res = await fastify.inject({
       method: 'PATCH',
       url: `/api/repos/${repoId}/specs/T-1/develop/subtasks/${subtaskId}/toggle`,
@@ -200,6 +206,7 @@ describe('Dashboard subtask endpoints (Phase 3)', () => {
 
   it('PATCH toggle returns 400 for unknown subtask id', async () => {
     await app.createSpec(repoId, 'T-1', 'x');
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
     const res = await fastify.inject({
       method: 'PATCH',
       url: `/api/repos/${repoId}/specs/T-1/develop/subtasks/nonexistent/toggle`,
@@ -221,6 +228,7 @@ describe('Dashboard subtask endpoints (Phase 3)', () => {
       ws.on('message', (d) => received.push(JSON.parse(d.toString())));
 
       await app.createSpec(repoId, 'T-1', 'x');
+    await prepareStage(app, repo, repoId, 'T-1', 'develop');
       await app.setDevelopSubtasks(repoId, 'T-1', [{ description: 'Task' }]);
       await new Promise((r) => setTimeout(r, 100));
       ws.close();
@@ -239,7 +247,7 @@ describe('Dashboard needs-revision endpoint', () => {
     const res = await fastify.inject({
       method: 'POST',
       url: `/api/repos/${repoId}/specs/NR-1/needs-revision`,
-      payload: { stageId: 'spec', comment: 'please add error handling' },
+      payload: { stageId: 'spec', expectedRevision: 1, comment: 'please add error handling' },
     });
     expect(res.statusCode).toBe(200);
     const spec = res.json();
@@ -266,7 +274,7 @@ describe('Dashboard needs-revision endpoint', () => {
     const res = await fastify.inject({
       method: 'POST',
       url: `/api/repos/${repoId}/specs/NR-3/advance`,
-      payload: { stageId: 'spec' },
+      payload: { stageId: 'spec', expectedRevision: 1 },
     });
     // No /advance REST endpoint — gate is enforced in MCP; just verify via AppCore
     const spec = await app.getSpec(repoId, 'NR-3');

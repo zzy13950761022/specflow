@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { AppCore } from './app-core.js';
 import { GateNotApprovedError } from './stage-machine.js';
+import { prepareStage, prepareImplementation, recordTaskLog } from '../test-support/workflow-fixtures.js';
 
 let home: string;
 let repo: string;
@@ -113,6 +114,7 @@ describe('AppCore readArtifact (review-before-approve)', () => {
 describe('AppCore readArtifactData (requirements sidecar)', () => {
   it('round-trips the structured requirements sidecar', async () => {
     await app.createSpec(repoId, 'REQ-1', 'Requirements');
+    await prepareStage(app, repo, repoId, 'REQ-1', 'requirements');
     await app.recordAiOutput(repoId, 'REQ-1', 'requirements', '# summary', {
       kind: 'requirements',
       data: {
@@ -173,6 +175,7 @@ describe('AppCore repo lifecycle', () => {
 describe('AppCore subtask management (Phase 3)', () => {
   it('setSubtasks persists tasks and emits spec.updated', async () => {
     await app.createSpec(repoId, 'TASK-1', 'Feature');
+    await prepareStage(app, repo, repoId, 'TASK-1', 'develop');
     const events: string[] = [];
     app.events.subscribe((e) => events.push(e.type));
 
@@ -189,6 +192,7 @@ describe('AppCore subtask management (Phase 3)', () => {
 
   it('setSubtasks persists to disk — round-trip via getSpec', async () => {
     await app.createSpec(repoId, 'TASK-1', 'Feature');
+    await prepareStage(app, repo, repoId, 'TASK-1', 'develop');
     await app.setDevelopSubtasks(repoId, 'TASK-1', [
       { description: 'Alpha' },
       { description: 'Beta' },
@@ -203,6 +207,7 @@ describe('AppCore subtask management (Phase 3)', () => {
 
   it('toggleSubtask flips the targeted task and emits spec.updated', async () => {
     await app.createSpec(repoId, 'TASK-1', 'Feature');
+    await prepareStage(app, repo, repoId, 'TASK-1', 'develop');
     let spec = await app.setDevelopSubtasks(repoId, 'TASK-1', [
       { description: 'T1' },
       { description: 'T2' },
@@ -212,6 +217,8 @@ describe('AppCore subtask management (Phase 3)', () => {
     const updates: string[] = [];
     app.events.subscribe((e) => { if (e.type === 'spec.updated') updates.push(e.spec.ticketId); });
 
+    await prepareImplementation(app, repoId, 'TASK-1');
+    await recordTaskLog(app, repoId, 'TASK-1', id);
     spec = await app.toggleSubtask(repoId, 'TASK-1', id);
     expect(spec.stages.find((s) => s.id === 'develop')!.subtasks![0].completed).toBe(true);
     expect(updates).toContain('TASK-1');
@@ -219,9 +226,12 @@ describe('AppCore subtask management (Phase 3)', () => {
 
   it('aiStatus becomes done when all subtasks are toggled on', async () => {
     await app.createSpec(repoId, 'TASK-1', 'Feature');
+    await prepareStage(app, repo, repoId, 'TASK-1', 'develop');
     // Phase 5: develop is now auto, so toggling the only subtask to completed makes aiStatus 'done'.
     let spec = await app.setDevelopSubtasks(repoId, 'TASK-1', [{ description: 'Only one' }]);
     const id = spec!.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
+    await prepareImplementation(app, repoId, 'TASK-1');
+    await recordTaskLog(app, repoId, 'TASK-1', id);
     spec = await app.toggleSubtask(repoId, 'TASK-1', id);
     // Phase 5: all stages are auto, so aiStatus derives to 'done' when all tasks completed.
     expect(spec!.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('done');
