@@ -57,3 +57,26 @@ and are excluded locally rather than published. Team untracked work outside
 `mcp/ai-pilot` remains in its original checkout; a separate clone of its committed
 branch is prepared as a clean synchronization input. This preparation performs
 no remote fetch, bootstrap, import, export or push.
+
+## Reviewed first synchronization — 2026-11-10
+
+- Fetched both remotes. Team `ai_pilot_feature` advanced from `a837ec2` to
+  `23d252e` with five commits adding inline annotations and revise UI changes.
+  Personal remote main `0b735b4` is already an ancestor of the standalone branch.
+- Joined explicit historical bases `4721fc1` / `a837ec2`, preserved standalone
+  tip `a7cc2d7`, and imported both the team's `23d252e` component history and
+  the OpenCode adaptation from local team branch `fcde4ef`.
+- Conflict resolutions retain published package runtime dependencies, the safe
+  sync wrapper, current workflow documentation, approval revisions, real evidence,
+  pause/rework controls and teammates' annotation UI. Annotation drafts reset
+  across ticket/stage/revision changes; all decisions carry the loaded revision.
+- Restored the team's requirements-sidecar MCP regression under current stage
+  constraints and added browser coverage for annotation revise r1, cleared
+  drafts at r2, reject r3 and approve r4.
+- Verification: 245 backend tests, 19 frontend tests, two browser workflows,
+  frontend TypeScript check and production build passed. Independent read-only
+  review found no important issues; the screenshot was inspected.
+- Publish targets are the two `ai_pilot_feature` branches; retain all merge
+  ancestry. Export validation protects every team file outside `mcp/ai-pilot`.
+  The local OpenCode checkout can receive the same component through a separate
+  export while its unpublished work stays local.

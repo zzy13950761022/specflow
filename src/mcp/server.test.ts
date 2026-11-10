@@ -102,17 +102,50 @@ describe('MCP tools drive real state on disk', () => {
     expect(spec).toBe('# body');
     expect(events).toContain('spec.updated');
   });
+  it('record_ai_output with requirementsData persists a requirements artifact + JSON sidecar', async () => {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'REQ-1', title: 'x' } });
+    await prepareStage(app, repo, repoId, 'REQ-1', 'requirements');
+    await client.callTool({
+      name: 'record_ai_output',
+      arguments: {
+        repoId,
+        ticketId: 'REQ-1',
+        stageId: 'requirements',
+        content: '# reqs',
+        requirementsData: {
+          affectedFiles: [{ path: 'src/x.ts', impact: 'change' }],
+          reuse: [{ title: 'ReuseMe' }],
+          buildFromScratch: [],
+          dataMigration: [],
+          integrations: [],
+        },
+      },
+    });
+    const specJson = JSON.parse(
+      await fs.readFile(join(repo, '.specflow', 'specs', 'REQ-1.json'), 'utf-8')
+    );
+    const reqStage = specJson.stages.find((s: { id: string }) => s.id === 'requirements');
+    expect(reqStage.artifact.kind).toBe('requirements');
+    expect(reqStage.artifact.dataPath).toContain('1-requirements.json');
+    const sidecar = JSON.parse(
+      await fs.readFile(join(repo, reqStage.artifact.dataPath), 'utf-8')
+    );
+    expect(sidecar.affectedFiles[0].path).toBe('src/x.ts');
+    expect(sidecar.affectedFiles[0].impact).toBe('change');
+    expect(sidecar.reuse[0].title).toBe('ReuseMe');
+  });
 });
 
 describe('MCP create_spec templateStatus', () => {
-  it('returns templateStatus "none" and propose nextStep when no repo templates exist', async () => {
+  it('returns templateStatus "none" and guides directly to the blueprint prompt', async () => {
     const res: any = await client.callTool({
       name: 'create_spec',
       arguments: { repoId, ticketId: 'TS-1', title: 'x' },
     });
     const payload = parse(res);
     expect(payload.templateStatus).toBe('none');
-    expect(payload.nextSteps[0]).toMatch(/propose_repo_templates/i);
+    expect(payload.nextSteps[0]).toMatch(/get_stage_prompt/i);
+    expect(payload.nextSteps[0]).toMatch(/blueprint/i);
     expect(payload.spec.ticketId).toBe('TS-1');
   });
 

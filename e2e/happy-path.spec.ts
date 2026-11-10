@@ -110,3 +110,70 @@ test('happy path: add repo, create spec, Claude records output, human approves, 
   await expect(page.getByRole('button', { name: 'Pause execution', exact: true })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/ai-pilot-workflow-e2e.png', fullPage: true });
 });
+
+test('inline annotations stay revision-bound through revise, reject and approve', async ({ page }) => {
+  const added = await page.request.post('/api/repos', { data: { path: repo } });
+  const repoId = (await added.json()).id;
+  const client = await mcpClient();
+  const ticketId = 'E2E-ANNOTATIONS';
+  const url = '/api/repos/' + repoId + '/specs/' + ticketId;
+  let submittedRevision = 1;
+  async function submit(content: string) {
+    const result = await client.callTool({ name: 'record_ai_output', arguments: { repoId, ticketId, stageId: 'spec', content } });
+    expect(result.isError).not.toBe(true);
+    submittedRevision++;
+    await expect(page.getByText('Artifact revision: ' + submittedRevision, { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
+  }
+  async function waitDecision(action: string, button: string, revision: number) {
+    const request = page.waitForRequest((r) => r.url().endsWith(url + '/' + action) && r.method() === 'POST');
+    await page.getByRole('button', { name: button, exact: true }).click();
+    const body = (await request).postDataJSON();
+    expect(body.expectedRevision).toBe(revision);
+    return body;
+  }
+  try {
+    await client.callTool({ name: 'create_spec', arguments: { repoId, ticketId, title: 'Annotation review', workflowKind: 'bugfix' } });
+    await client.callTool({ name: 'record_ai_output', arguments: { repoId, ticketId, stageId: 'spec', content: '# Review\n\nInitial contract text.' } });
+    await page.goto('/repos/' + repoId + '/specs/' + ticketId);
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
+    await page.locator('.md-body p').first().evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    await page.getByPlaceholder('Add your revision note…').fill('Use ACTIVE and INACTIVE only');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: /^Revise/ }).click();
+    await expect(page.getByText('Use ACTIVE and INACTIVE only', { exact: true })).toBeVisible();
+    const first = await waitDecision('needs-revision', 'Request revision', 1);
+    expect(first.comment).toContain('Initial contract text.');
+    expect(first.comment).toContain('Use ACTIVE and INACTIVE only');
+    await expect.poll(async () => (await (await page.request.get(url)).json()).stages[0].gate.status).toBe('needs_revision');
+
+    await submit('# Review\n\nRevised contract text.');
+    await page.getByRole('button', { name: /^Revise/ }).click();
+    await expect(page.getByText('Use ACTIVE and INACTIVE only', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Request revision', exact: true })).toBeDisabled();
+    await page.getByPlaceholder('Overall revision comment (optional)…').fill('Explain the response mapping');
+    const second = await waitDecision('needs-revision', 'Request revision', 2);
+    expect(second.comment).toBe('Explain the response mapping');
+    await expect.poll(async () => (await (await page.request.get(url)).json()).stages[0].gate.status).toBe('needs_revision');
+
+    await submit('# Review\n\nThird contract text.');
+    await page.getByRole('button', { name: 'Reject', exact: true }).click();
+    await page.getByPlaceholder('Why reject?').fill('Reconsider the mapping');
+    await waitDecision('reject', 'Confirm reject', 3);
+    await expect.poll(async () => (await (await page.request.get(url)).json()).stages[0].gate.status).toBe('rejected');
+
+    await submit('# Review\n\nFinal contract text.');
+    await waitDecision('approve', 'Approve', 4);
+    await expect.poll(async () => (await (await page.request.get(url)).json()).stages[0].gate.approvedRevision).toBe(4);
+    await page.screenshot({ path: '/private/tmp/ai-pilot-annotations-e2e.png', fullPage: true });
+  } finally {
+    await client.close();
+  }
+});
