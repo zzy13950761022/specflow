@@ -242,6 +242,35 @@ to write it after checking the preview. The script requires an unchanged complet
 legacy approval trail, rejects rework/new output/running claims, locks each ticket
 and saves original JSON under `.specflow/backups/` before atomic replacement.
 
+## Shared Claude/Codex Specflow skill
+
+The maintained workflow skill is [skills/specflow/SKILL.md](skills/specflow/SKILL.md).
+It follows the MCP's current execution actions, templates, revision approvals,
+claim-aware development, real check evidence, rework and recovery. Repository-
+specific SAP conventions are a conditional reference rather than universal rules.
+
+Install user-level shared links from this checkout:
+
+```bash
+python3 scripts/install-specflow-skill.py         # Preview only
+python3 scripts/install-specflow-skill.py --apply # Back up existing skills and link
+```
+
+Codex discovers `~/.agents/skills/specflow`, linked to this checkout's skill. Claude
+uses `~/.claude/skills/specflow`, linked to the shared location. Existing copies are
+moved into `~/.agents/skill-backups/` or `~/.claude/skill-backups/` before replacement.
+Later edits in the checkout update both clients; keep this checkout available.
+Repeated installation is idempotent. Start a new/reloaded client session for skill
+discovery, and ensure the AI Pilot MCP is separately registered in that client.
+
+Invoke in Claude with `/specflow TICKET-ID description`, or in Codex with
+`$specflow TICKET-ID description`. Natural-language requests to use Specflow also
+match the skill. No workflow is started by installing it.
+
+Installer tests: `python3 -m unittest discover -s tests/skills -p test_install_specflow.py`.
+Behavioral evaluation scenarios are in `tests/skills/specflow-scenarios.json`; run
+them as simulated skill applications without operating on live tickets.
+
 ## MCP tools reference
 
 | Tool | Description |
