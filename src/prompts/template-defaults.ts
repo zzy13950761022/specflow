@@ -15,7 +15,7 @@ You are drafting the AI-consumable spec that Claude reads as its primary context
 for every development session on this ticket. Write it to \`.specflow/specs/{{ticketId}}-<feature-name>.md\`.
 
 The spec MUST include:
-- **Acceptance criteria** in Given/When/Then form.
+- **Acceptance criteria** in Given/When/Then form, with stable IDs. Supply acceptanceCriteria (id/given/when/then) when calling record_ai_output.
 - **Affected file paths** (concrete, from this repo).
 - **Interface contracts** (signatures, request/response shapes).
 - **Step-by-step logic** with explicit conditionals.
@@ -108,20 +108,23 @@ each task. For each subtask include:
 - prompt: role, task detail, restrictions, success criteria
 - requirementRef: which requirement it implements
 - leverage: existing files/utilities to reuse
+- id: stable task identifier
+- dependsOn: task IDs this task requires; files: planned modified paths
+- testRefs: test files or test case identifiers covering the linked requirement
 
 Submit a markdown summary of the task list via record_ai_output. Human reviews
 and approves the plan before any code is written.
 
 ## Phase B — Implementation (after gate approved)
 
-For each subtask, in order:
+Read get_next_actions. Claim ready subtasks with claim_subtask; independently claimed tasks with nonconflicting files may run concurrently. For each claimed task:
 1. Search existing implementation logs via get_implementation_logs to avoid duplication.
 2. Read the subtask prompt field for role and guidance.
 3. Write the code using Write/Edit tools — follow repo conventions from CLAUDE.md.
-4. Call log_implementation with full artifacts (MANDATORY before marking done):
+4. Call log_implementation with the returned claimId and full artifacts (MANDATORY before marking done):
    - summary, filesModified, filesCreated, statistics
    - artifacts: apiEndpoints / components / functions / classes / integrations
-5. Call toggle_subtask to mark the subtask completed.
+5. Call set_subtask_completed with completed=true and the same claimId. This operation is idempotent.
 6. Move to the next subtask.
 
 Developer rules:
@@ -133,63 +136,18 @@ Developer rules:
 
   test: `# Stage 4 — Testing: {{ticketId}} {{title}}
 
-Write comprehensive unit tests for the new feature. Use {{testFramework}}.
-Cover: happy path, null inputs, boundary values, error paths.
-Target 80% line coverage on new code.
+Use the approved stage context and implementation logs to implement tests for every acceptance criterion. Cover happy paths, boundaries and error handling using {{testFramework}}.
 
-## MANDATORY: Execute Tests Before Submitting
+Execute run_stage_check with stageId=test. The platform runs the command in .specflow/checks.json, records its exit code and output, and reads actual Istanbul line coverage from the configured report. A passing exit code and at least 80% measured coverage are required. Never estimate coverage or use AI-supplied metrics as evidence.
 
-**You MUST run the tests and include actual results in record_ai_output.**
-
-Steps (all required):
-1. Run the test suite: \`{{testCommand}}\`
-2. If it does not compile, fix errors first.
-3. Capture the output (pass/fail counts, any errors).
-4. Set stageCoverage based on actual results:
-   - All tests pass + covers happy path + error paths = 0.85 or higher
-   - Some tests pass = 0.5–0.84
-   - Tests fail or not run = 0.0
-
-In \`record_ai_output\` include:
-- \`metrics: { stageCoverage: <number> }\` — REQUIRED or advance_stage will be blocked
-- Actual test output under a \`## Test Execution Results\` section
-
-**Do NOT set stageCoverage if you have not actually run the tests.**
-
-## Gate Flow
-
-After calling \`record_ai_output\`, call \`get_approval_status\` immediately.
-The tool **blocks** until the gate status changes (long poll).
-- \`approved\` → call \`advance_stage\` and proceed.
-- \`needs_revision\` / \`rejected\` → read \`gate.comment\`, revise, re-submit.
-- \`pending_review\` after timeout → call \`get_approval_status\` again.
+Record the result summary with record_ai_output, including references to the platform run and relevant test cases. Use get_traceability to identify criteria missing implementation or tests. Then call get_approval_status (waitMs up to 60000); act on its structured actions. If tests expose a design or implementation defect, use reopen_stage with the earliest affected stage and a concrete reason, then redo invalidated downstream work.
 `,
 
   build: `# Stage 5 — Build & CI: {{ticketId}} {{title}}
 
-Verify the build passes before submitting.
+Execute run_stage_check with stageId=build. The platform runs the configured argv from .specflow/checks.json and records actual output, exit code and code fingerprint. AI metrics alone do not satisfy the gate. Fix compilation/configuration issues before submitting; source changes require revalidating TEST first.
 
-## MANDATORY: Run the Build Before Submitting
-
-1. Run: \`{{buildCommand}}\`
-2. Capture the output (success/failure, any errors).
-3. Set buildSuccess based on actual results:
-   - All compilation and tests pass = true
-   - Any failure = false (investigate and fix first)
-
-In \`record_ai_output\` include:
-- \`metrics: { buildSuccess: true }\` — REQUIRED or advance_stage will be blocked
-- Actual build output under a \`## Build Results\` section
-
-Diagnose any failures: identify root cause, affected component, required fix.
-Distinguish compilation errors, configuration errors, and test failures.
-
-## Gate Flow
-
-After calling \`record_ai_output\`, call \`get_approval_status\` immediately.
-The tool **blocks** until the gate status changes (long poll).
-- \`approved\` → call \`advance_stage\` and proceed.
-- \`needs_revision\` / \`rejected\` → read \`gate.comment\`, revise, re-submit.
+Record the build summary using record_ai_output and reference its platform run. Call get_approval_status and follow structured actions; an opted-in low-risk check policy may approve passing checks. Human release approval remains mandatory.
 `,
 
   deploy: `# Stage 6 — Deployment: {{ticketId}} {{title}}

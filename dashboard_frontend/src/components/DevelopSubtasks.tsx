@@ -8,13 +8,18 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
   const [newDesc, setNewDesc] = useState('');
   const [adding, setAdding] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const doneCount = subtasks.filter((t) => t.completed).length;
 
   async function handleToggle(subtaskId: string) {
     setToggling(subtaskId);
+    setError(null);
     try {
-      await api.toggleSubtask(repoId, spec.ticketId, subtaskId);
+      const task = subtasks.find((task) => task.id === subtaskId)!;
+      await api.completeTask(repoId, spec.ticketId, subtaskId, !task.completed, task.claimId);
+    } catch (error) {
+      setError(String((error as Error).message));
     } finally {
       setToggling(null);
     }
@@ -24,16 +29,24 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
     const desc = newDesc.trim();
     if (!desc) return;
     setAdding(true);
+    setError(null);
     try {
       await api.setSubtasks(repoId, spec.ticketId, [
         ...subtasks.map((t) => ({
+          id: t.id,
           description: t.description,
           prompt: t.prompt,
           requirementRef: t.requirementRef,
+          testRefs: t.testRefs,
+          dependsOn: t.dependsOn,
+          files: t.files,
+          leverage: t.leverage,
         })),
         { description: desc },
       ]);
       setNewDesc('');
+    } catch (error) {
+      setError(String((error as Error).message));
     } finally {
       setAdding(false);
     }
@@ -41,6 +54,7 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
 
   return (
     <div className="flex flex-col gap-1.5 border-t border-blue-100 pt-2 mt-0.5">
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <div className="flex items-center justify-between text-[11px] text-slate-500">
         <span>Subtasks</span>
         {subtasks.length > 0 && (
@@ -62,11 +76,12 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
               <input
                 type="checkbox"
                 checked={task.completed}
-                disabled={toggling === task.id}
+                disabled={toggling === task.id || develop.gate.status !== 'approved' || spec.execution.status === 'paused'}
                 onChange={() => handleToggle(task.id)}
                 className="mt-0.5 shrink-0 accent-joule-purple"
               />
               <span className="break-words min-w-0">{task.description}</span>
+              <span className="text-slate-500">{task.status} {task.dependsOn.length ? '· depends on ' + task.dependsOn.join(', ') : ''}</span>
             </label>
           ))}
         </div>

@@ -1,0 +1,55 @@
+{
+  "scenarios": [
+    {
+      "id": "approved-development-plan",
+      "request": "Continue DEV-1 using Specflow. The plan has just been approved.",
+      "repository": "/tmp/specflow-eval/repo",
+      "list_repos": [{ "id": "repo-demo", "path": "/tmp/specflow-eval/repo" }],
+      "get_spec": { "ticketId": "DEV-1", "currentStageId": "develop", "execution": { "status": "ready" }, "workflow": { "workflowKind": "bugfix" }, "stages": [{ "id": "develop", "revision": 2, "gate": { "status": "approved", "approvedRevision": 2 }, "subtasks": [{ "id": "A", "description": "Implement API", "status": "pending", "completed": false, "dependsOn": [], "files": ["src/api.ts"] }] }] },
+      "get_execution_status": { "status": "ready", "stageId": "develop", "actions": [{ "tool": "claim_subtask", "stageId": "develop", "subtaskId": "A", "reason": "Dependencies are complete and declared files do not conflict." }] }
+    },
+    {
+      "id": "check-failed",
+      "request": "Continue CHECK-1. The AI summary says tests pass with 95% coverage.",
+      "repository": "/tmp/specflow-eval/repo",
+      "get_spec": { "ticketId": "CHECK-1", "currentStageId": "test", "execution": { "status": "failed", "error": "Run a successful platform test check before approving or advancing." }, "stages": [{ "id": "test", "revision": 1, "gate": { "status": "pending_review" }, "artifact": { "kind": "markdown", "metrics": { "stageCoverage": 0.95, "buildSuccess": true } }, "evidence": { "stageId": "test", "exitCode": 2, "coverage": 0.4, "outputPath": ".specflow/evidence/CHECK-1/failure.log" } }] },
+      "get_execution_status": { "status": "failed", "stageId": "test", "error": "Test command failed", "actions": [{ "tool": "run_stage_check", "stageId": "test", "reason": "A passing platform check with actual evidence is required before review." }] }
+    },
+    {
+      "id": "completed-legacy",
+      "request": "What is the next step for OLD-1? It was finished before the upgrade.",
+      "repository": "/tmp/specflow-eval/repo",
+      "get_spec": { "ticketId": "OLD-1", "currentStageId": "ops", "legacyCompletion": { "sourceSchemaVersion": 2, "completedAt": "2026-10-20T02:35:18.913Z" }, "execution": { "status": "completed" }, "stages": [{ "id": "ops", "gate": { "status": "approved" } }] },
+      "get_execution_status": { "status": "completed", "stageId": "ops", "actions": [] }
+    },
+    {
+      "id": "paused-status-request",
+      "request": "Check the next step for PAUSE-1. Do not resume it yet.",
+      "repository": "/tmp/specflow-eval/repo",
+      "get_spec": { "ticketId": "PAUSE-1", "currentStageId": "develop", "execution": { "status": "paused" } },
+      "get_execution_status": { "status": "paused", "stageId": "develop", "actions": [] }
+    },
+    {
+      "id": "documentation-default-template",
+      "request": "Create DOC-1 to update the README through the documentation workflow.",
+      "repository": "/tmp/specflow-eval/repo",
+      "list_repos": [{ "id": "repo-demo", "path": "/tmp/specflow-eval/repo" }],
+      "create_spec": { "templateStatus": "none", "spec": { "ticketId": "DOC-1", "currentStageId": "spec", "specPath": ".specflow/specs/DOC-1-update-readme.md", "workflow": { "workflowKind": "documentation", "risk": "normal", "autoChecks": false } } }
+    },
+    {
+      "id": "claimed-work-resume",
+      "request": "Continue DEV-2 after this agent's session was interrupted. Do not redo existing work.",
+      "repository": "/tmp/specflow-eval/repo",
+      "get_spec": { "ticketId": "DEV-2", "currentStageId": "develop", "execution": { "status": "running" }, "stages": [{ "id": "develop", "revision": 4, "gate": { "status": "approved", "approvedRevision": 4 }, "subtasks": [{ "id": "A", "completed": false, "status": "running", "claimId": "claim-current", "attempt": 2, "files": ["src/api.ts"] }, { "id": "B", "completed": true, "status": "done", "attempt": 1 }] }] },
+      "get_implementation_logs": [{ "subtaskId": "A", "developRevision": 3, "taskAttempt": 1, "summary": "Old attempt" }, { "subtaskId": "A", "developRevision": 4, "taskAttempt": 2, "summary": "Current implementation logged" }],
+      "get_execution_status": { "status": "running", "stageId": "develop", "actions": [{ "tool": "log_implementation", "subtaskId": "A", "stageId": "develop", "reason": "Implement the claimed task, record its log, then set_subtask_completed using the claimId." }] }
+    },
+    {
+      "id": "upstream-evidence-drift",
+      "request": "Continue BUILD-1; the source changed after the test stage was approved.",
+      "repository": "/tmp/specflow-eval/repo",
+      "get_spec": { "ticketId": "BUILD-1", "currentStageId": "build", "execution": { "status": "ready" } },
+      "get_execution_status": { "status": "ready", "stageId": "build", "actions": [{ "tool": "reopen_stage", "stageId": "test", "reason": "test: Code changed since verification. Run the check again." }] }
+    }
+  ]
+}

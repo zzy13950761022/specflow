@@ -23,11 +23,12 @@ export function BoardPage() {
       <div className="flex items-center gap-3">
         {view === 'board' && (
           <NewSpec
-            onCreate={async (ticketId, title) => {
+            onCreate={async (ticketId, title, options) => {
               try {
-                await api.createSpec(activeRepo, ticketId, title);
+                await api.createSpec(activeRepo, ticketId, title, options);
               } catch (e) {
                 setError(String((e as Error).message));
+                throw e;
               }
             }}
           />

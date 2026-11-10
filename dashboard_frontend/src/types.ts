@@ -111,31 +111,7 @@ export type Artifact =
   | OpsReportArtifact
   | RequirementsArtifact;
 
-export interface Stage {
-  id: StageId;
-  aiStatus: AiStatus;
-  aiCapability: AiCapability;
-  gate: Gate;
-  artifact?: Artifact;
-  subtasks?: Array<{
-    id: string;
-    description: string;
-    completed: boolean;
-    prompt?: string;
-    requirementRef?: string;
-  }>;
-}
-
-export interface SpecFile {
-  schemaVersion: number;
-  ticketId: string;
-  title: string;
-  specPath: string;
-  stages: Stage[];
-  gateHistory: Array<{ stageId: StageId; from: GateStatus; to: GateStatus; at: string }>;
-  createdAt: string;
-  updatedAt: string;
-}
+export type { Stage, SpecFile, Subtask, WorkflowOptions, CheckEvidence } from '../../src/core/schemas';
 
 export type TemplateSource = 'repo-curated' | 'repo-draft' | 'blueprint-default';
 

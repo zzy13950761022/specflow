@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { AppCore } from '../core/app-core.js';
-import { StageIdSchema } from '../core/schemas.js';
+import { StageIdSchema, WorkflowOptionsSchema, SubtaskInputSchema } from '../core/schemas.js';
+import { z } from 'zod';
+import { registerWorkflowRoutes } from './workflow-routes.js';
 import { logger } from '../core/logger.js';
 import { pickFolder } from './folder-picker.js';
 import type { WebSocket } from 'ws';
@@ -25,6 +27,7 @@ export interface DashboardOptions {
 
 export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
   const fastify = Fastify({ logger: false });
+  registerWorkflowRoutes(fastify, app);
   await fastify.register(fastifyWebsocket);
 
   const sockets = new Set<WebSocket>();
@@ -108,31 +111,20 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
     const stage = StageIdSchema.safeParse(req.query.stageId);
     if (!stage.success) return reply.code(400).send({ error: 'valid stageId required' });
     try {
-      const content = await app.readArtifact(req.params.repoId, req.params.ticketId, stage.data);
-      if (content === null) return reply.code(404).send({ error: 'no artifact for this stage' });
-      const spec = await app.getSpec(req.params.repoId, req.params.ticketId);
-      const artifactMeta = spec?.stages.find((s) => s.id === stage.data)?.artifact ?? null;
-      // Structured kinds (currently only 'requirements') carry a JSON sidecar the
-      // dashboard renders natively; include it as `data` when present.
-      const data =
-        artifactMeta?.kind === 'requirements'
-          ? await app.readArtifactData(req.params.repoId, req.params.ticketId, stage.data)
-          : null;
-      return { stageId: stage.data, content, artifact: artifactMeta, data };
+      return await app.getArtifactReview(req.params.repoId, req.params.ticketId, stage.data);
     } catch (e) {
       return reply.code(404).send({ error: String((e as Error).message) });
     }
   });
 
-  fastify.post<{ Params: { repoId: string }; Body: { ticketId?: string; title?: string } }>(
+  fastify.post<{ Params: { repoId: string }; Body: unknown }>(
     '/api/repos/:repoId/specs',
     async (req, reply) => {
-      const { ticketId, title } = req.body ?? {};
-      if (!ticketId || !title) {
-        return reply.code(400).send({ error: 'ticketId and title are required' });
-      }
+      const input = WorkflowOptionsSchema.extend({ ticketId: z.string().min(1), title: z.string().min(1) }).safeParse(req.body);
+      if (!input.success) return reply.code(400).send({ error: input.error.message });
+      const { ticketId, title, ...options } = input.data;
       try {
-        return await app.createSpec(req.params.repoId, ticketId, title);
+        return await app.createSpec(req.params.repoId, ticketId, title, options);
       } catch (e) {
         return reply.code(400).send({ error: String((e as Error).message) });
       }
@@ -168,12 +160,14 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
   /* ---- gates: the human actions ---- */
   fastify.post<{
     Params: { repoId: string; ticketId: string };
-    Body: { stageId?: string };
+    Body: { stageId?: string; expectedRevision?: number };
   }>('/api/repos/:repoId/specs/:ticketId/approve', async (req, reply) => {
     const stage = StageIdSchema.safeParse(req.body?.stageId);
     if (!stage.success) return reply.code(400).send({ error: 'valid stageId required' });
     try {
-      return await app.approve(req.params.repoId, req.params.ticketId, stage.data);
+      const revision = z.number().int().min(0).safeParse(req.body?.expectedRevision);
+      if (!revision.success) return reply.code(400).send({ error: 'expectedRevision is required; refresh the artifact before approving.' });
+      return await app.approve(req.params.repoId, req.params.ticketId, stage.data, revision.data);
     } catch (e) {
       return reply.code(400).send({ error: String((e as Error).message) });
     }
@@ -181,16 +175,19 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
 
   fastify.post<{
     Params: { repoId: string; ticketId: string };
-    Body: { stageId?: string; comment?: string };
+    Body: { stageId?: string; comment?: string; expectedRevision?: number };
   }>('/api/repos/:repoId/specs/:ticketId/reject', async (req, reply) => {
     const stage = StageIdSchema.safeParse(req.body?.stageId);
     if (!stage.success) return reply.code(400).send({ error: 'valid stageId required' });
     try {
+      const revision = z.number().int().min(0).safeParse(req.body?.expectedRevision);
+      if (!revision.success) return reply.code(400).send({ error: 'expectedRevision is required.' });
       return await app.reject(
         req.params.repoId,
         req.params.ticketId,
         stage.data,
-        req.body?.comment ?? ''
+        req.body?.comment ?? '',
+        revision.data
       );
     } catch (e) {
       return reply.code(400).send({ error: String((e as Error).message) });
@@ -199,16 +196,19 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
 
   fastify.post<{
     Params: { repoId: string; ticketId: string };
-    Body: { stageId?: string; comment?: string };
+    Body: { stageId?: string; comment?: string; expectedRevision?: number };
   }>('/api/repos/:repoId/specs/:ticketId/needs-revision', async (req, reply) => {
     const stage = StageIdSchema.safeParse(req.body?.stageId);
     if (!stage.success) return reply.code(400).send({ error: 'valid stageId required' });
     try {
+      const revision = z.number().int().min(0).safeParse(req.body?.expectedRevision);
+      if (!revision.success) return reply.code(400).send({ error: 'expectedRevision is required.' });
       return await app.requestRevision(
         req.params.repoId,
         req.params.ticketId,
         stage.data,
-        req.body?.comment ?? ''
+        req.body?.comment ?? '',
+        revision.data
       );
     } catch (e) {
       return reply.code(400).send({ error: String((e as Error).message) });
@@ -229,7 +229,9 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
         return reply.code(400).send({ error: 'subtasks array is required' });
       }
       try {
-        return await app.setDevelopSubtasks(req.params.repoId, req.params.ticketId, subtasks);
+        const parsed = z.array(SubtaskInputSchema).safeParse(subtasks);
+        if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
+        return await app.setDevelopSubtasks(req.params.repoId, req.params.ticketId, parsed.data);
       } catch (e) {
         return reply.code(400).send({ error: String((e as Error).message) });
       }

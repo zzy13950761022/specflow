@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { StageMachine, GateNotApprovedError, AUTO_STAGES } from './stage-machine.js';
-import { STAGE_IDS, GateStatusSchema } from './schemas.js';
+import { STAGE_IDS, GateStatusSchema, SubtaskSchema } from './schemas.js';
+
+import { atStage, approvePlan } from '../test-support/workflow-fixtures.js';
 
 describe('GateStatusSchema (hook A: reserved needs_revision)', () => {
   it('accepts the reserved needs_revision value', () => {
@@ -59,7 +61,7 @@ describe('StageMachine.recordAiOutput', () => {
 
   it('stores a deploy-checklist artifact with items', () => {
     const sm = new StageMachine();
-    let spec = sm.createSpec({ ticketId: 'DEPLOY-1', title: 'Deployment' });
+    let spec = atStage(sm.createSpec({ ticketId: 'DEPLOY-1', title: 'Deployment' }), 'deploy');
     spec = sm.recordAiOutput(spec, 'deploy', {
       kind: 'deploy-checklist',
       path: '.specflow/artifacts/DEPLOY-1/6-deploy.md',
@@ -77,7 +79,7 @@ describe('StageMachine.recordAiOutput', () => {
 
   it('stores an ops-report artifact with logsSanitized flag', () => {
     const sm = new StageMachine();
-    let spec = sm.createSpec({ ticketId: 'OPS-1', title: 'Ops' });
+    let spec = atStage(sm.createSpec({ ticketId: 'OPS-1', title: 'Ops' }), 'ops');
     spec = sm.recordAiOutput(spec, 'ops', {
       kind: 'ops-report',
       path: '.specflow/artifacts/OPS-1/7-ops.md',
@@ -172,16 +174,20 @@ describe('StageMachine.advance — the core gating invariant', () => {
   it('cannot advance past the final stage (ops)', () => {
     const sm = new StageMachine();
     let spec = sm.createSpec({ ticketId: 'ABC-1', title: 'x' });
-    // force ops gate approved directly for the test
+    spec = atStage(spec, 'ops');
+    // force final approval for this isolated boundary test
     const ops = spec.stages[7];
     ops.gate.status = 'approved';
+    ops.gate.approvedRevision = ops.revision;
     expect(() => sm.advance(spec, 'ops')).toThrow(/final stage/i);
   });
 });
 
 describe('StageMachine subtask methods (Phase 3)', () => {
   function mkSpec() {
-    return new StageMachine().createSpec({ ticketId: 'ABC-1', title: 'x' });
+    const spec = atStage(new StageMachine().createSpec({ ticketId: 'ABC-1', title: 'x' }), 'develop');
+    spec.acceptanceCriteria = [{ id: 'REQ-1', given: 'Input', when: 'Action', then: 'Result' }];
+    return spec;
   }
 
   describe('setSubtasks', () => {
@@ -252,6 +258,7 @@ describe('StageMachine subtask methods (Phase 3)', () => {
     it('flips a false task to true', () => {
       const sm = new StageMachine();
       let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
+      spec = approvePlan(spec);
       const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
       spec = sm.toggleSubtask(spec, id);
       expect(spec.stages.find((s) => s.id === 'develop')!.subtasks![0].completed).toBe(true);
@@ -260,6 +267,7 @@ describe('StageMachine subtask methods (Phase 3)', () => {
     it('flips a true task back to false', () => {
       const sm = new StageMachine();
       let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
+      spec = approvePlan(spec);
       const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
       spec = sm.toggleSubtask(spec, id); // → true
       spec = sm.toggleSubtask(spec, id); // → false
@@ -273,6 +281,7 @@ describe('StageMachine subtask methods (Phase 3)', () => {
         { description: 'T2' },
         { description: 'T3' },
       ]);
+      spec = approvePlan(spec);
       const subtasks = spec.stages.find((s) => s.id === 'develop')!.subtasks!;
       spec = sm.toggleSubtask(spec, subtasks[1].id);
       const after = spec.stages.find((s) => s.id === 'develop')!.subtasks!;
@@ -290,6 +299,7 @@ describe('StageMachine subtask methods (Phase 3)', () => {
     it('bumps updatedAt', () => {
       const sm = new StageMachine();
       let spec = sm.setSubtasks(mkSpec(), [{ description: 'T' }]);
+      spec = approvePlan(spec);
       const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
       const before = spec.updatedAt;
       spec = sm.toggleSubtask(spec, id);
@@ -317,6 +327,7 @@ describe('StageMachine subtask methods (Phase 3)', () => {
       // Phase 5: develop is auto from createSpec.
       let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }, { description: 'T2' }]);
 
+      spec = approvePlan(spec);
       const ids = spec.stages.find((s) => s.id === 'develop')!.subtasks!.map((t) => t.id);
       spec = sm.toggleSubtask(spec, ids[0]);
       expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('in_progress');
@@ -330,21 +341,18 @@ describe('StageMachine subtask methods (Phase 3)', () => {
       // Phase 5: develop is auto from createSpec, no need to manually set aiCapability.
       let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
 
+      spec = approvePlan(spec);
       const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
       spec = sm.toggleSubtask(spec, id); // done
       spec = sm.toggleSubtask(spec, id); // back to in_progress
       expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('in_progress');
     });
 
-    it('gate rule unchanged: DEVELOP gate still needs human approval to advance', () => {
+    it('DEVELOP requires plan approval before implementation or advancement', () => {
       const sm = new StageMachine();
-      // Phase 5: develop is auto from createSpec, no need to manually set aiCapability.
-      let spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
-
-      const id = spec.stages.find((s) => s.id === 'develop')!.subtasks![0].id;
-      spec = sm.toggleSubtask(spec, id);
-      // aiStatus is now done but gate is still not_ready — advance must fail
-      expect(spec.stages.find((s) => s.id === 'develop')!.aiStatus).toBe('done');
+      const spec = sm.setSubtasks(mkSpec(), [{ description: 'T1' }]);
+      const id = spec.stages[3].subtasks![0].id;
+      expect(() => sm.toggleSubtask(spec, id)).toThrow(/approved.*plan/i);
       expect(() => sm.advance(spec, 'develop')).toThrow(GateNotApprovedError);
     });
   });
@@ -384,7 +392,7 @@ describe('Phase 5 — AUTO_STAGES is the single capability source', () => {
     '%s stage: record_ai_output transitions gate to pending_review and marks aiStatus done',
     (stageId) => {
       const sm = new StageMachine();
-      let spec = sm.createSpec({ ticketId: 'P5-1', title: 'x' });
+      let spec = atStage(sm.createSpec({ ticketId: 'P5-1', title: 'x' }), stageId);
       const artifact =
         stageId === 'deploy'
           ? ({
@@ -407,7 +415,7 @@ describe('Phase 5 — AUTO_STAGES is the single capability source', () => {
     '%s stage: advance is still blocked until gate is approved',
     (stageId) => {
       const sm = new StageMachine();
-      let spec = sm.createSpec({ ticketId: 'P5-1', title: 'x' });
+      let spec = atStage(sm.createSpec({ ticketId: 'P5-1', title: 'x' }), stageId);
       const artifact =
         stageId === 'deploy'
           ? ({
@@ -422,7 +430,12 @@ describe('Phase 5 — AUTO_STAGES is the single capability source', () => {
       spec = sm.recordAiOutput(spec, stageId, artifact);
       // Gate is now pending_review — advance must be refused.
       expect(() => sm.advance(spec, stageId)).toThrow(GateNotApprovedError);
-      // After approval, advance succeeds.
+      if (stageId === 'develop') spec.stages[3].subtasks = [SubtaskSchema.parse({ id: 'implemented', description: 'Implemented', completed: true, status: 'done' })];
+      if (stageId === 'test' || stageId === 'build') spec.stages.find((stage) => stage.id === stageId)!.evidence = {
+        runId: 'fixture', stageId, command: 'node', args: [], exitCode: 0, startedAt: 'now', finishedAt: 'now', codeFingerprint: 'fixture',
+        codeChanged: false, timedOut: false, outputTruncated: false, outputPath: 'fixture.log', coverage: 0.9,
+      };
+      // Valid execution evidence and plan completion accompany approval.
       spec = sm.approve(spec, stageId);
       if (stageId !== 'ops') {
         expect(() => sm.advance(spec, stageId)).not.toThrow();

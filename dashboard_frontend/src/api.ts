@@ -1,4 +1,4 @@
-import type { Artifact, RepoEntry, RequirementsData, SpecFile, StageId, TemplateSummary } from './types';
+import type { Artifact, RepoEntry, RequirementsData, SpecFile, StageId, TemplateSummary, WorkflowOptions, Subtask } from './types';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -8,7 +8,20 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function workflowMutation(repoId: string, ticketId: string, path: string, body = {}) {
+  return fetch('/api/repos/' + encodeURIComponent(repoId) + '/specs/' + encodeURIComponent(ticketId) + path, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  }).then((response) => json<SpecFile>(response));
+}
+
 export const api = {
+  reopen: (repoId: string, ticketId: string, stageId: StageId, reason: string) => workflowMutation(repoId, ticketId, '/reopen', { stageId, reason }),
+  pause: (repoId: string, ticketId: string) => workflowMutation(repoId, ticketId, '/execution/pause'),
+  resume: (repoId: string, ticketId: string) => workflowMutation(repoId, ticketId, '/execution/resume'),
+  runCheck: (repoId: string, ticketId: string, stageId: 'test' | 'build') => workflowMutation(repoId, ticketId, '/checks', { stageId }),
+  completeTask: (repoId: string, ticketId: string, subtaskId: string, completed: boolean, claimId?: string) => workflowMutation(repoId, ticketId, '/develop/completed', { subtaskId, completed, claimId }),
+  execution: (repoId: string, ticketId: string) => fetch('/api/repos/' + repoId + '/specs/' + ticketId + '/execution').then((response) => json<{ status: string; error?: string; actions: Array<{ tool: string; reason: string }> }>(response)),
+  advance: (repoId: string, ticketId: string, stageId: StageId) => workflowMutation(repoId, ticketId, '/advance', { stageId }),
   listRepos: () => fetch('/api/repos').then((r) => json<RepoEntry[]>(r)),
 
   addRepo: (path: string) =>
@@ -38,32 +51,32 @@ export const api = {
   getSpec: (repoId: string, ticketId: string) =>
     fetch(`/api/repos/${repoId}/specs/${ticketId}`).then((r) => json<SpecFile>(r)),
 
-  createSpec: (repoId: string, ticketId: string, title: string) =>
+  createSpec: (repoId: string, ticketId: string, title: string, options: WorkflowOptions = {}) =>
     fetch(`/api/repos/${repoId}/specs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ticketId, title }),
+      body: JSON.stringify({ ticketId, title, ...options }),
     }).then((r) => json<SpecFile>(r)),
 
-  approve: (repoId: string, ticketId: string, stageId: StageId) =>
+  approve: (repoId: string, ticketId: string, stageId: StageId, expectedRevision: number) =>
     fetch(`/api/repos/${repoId}/specs/${ticketId}/approve`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ stageId }),
+      body: JSON.stringify({ stageId, expectedRevision }),
     }).then((r) => json<SpecFile>(r)),
 
-  reject: (repoId: string, ticketId: string, stageId: StageId, comment: string) =>
+  reject: (repoId: string, ticketId: string, stageId: StageId, comment: string, expectedRevision: number) =>
     fetch(`/api/repos/${repoId}/specs/${ticketId}/reject`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ stageId, comment }),
+      body: JSON.stringify({ stageId, comment, expectedRevision }),
     }).then((r) => json<SpecFile>(r)),
 
-  needsRevision: (repoId: string, ticketId: string, stageId: StageId, comment: string) =>
+  needsRevision: (repoId: string, ticketId: string, stageId: StageId, comment: string, expectedRevision: number) =>
     fetch(`/api/repos/${repoId}/specs/${ticketId}/needs-revision`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ stageId, comment }),
+      body: JSON.stringify({ stageId, comment, expectedRevision }),
     }).then((r) => json<SpecFile>(r)),
 
   listTemplates: (repoId: string) =>
@@ -74,6 +87,7 @@ export const api = {
     fetch(`/api/repos/${repoId}/specs/${ticketId}/artifact?stageId=${stageId}`).then((r) =>
       json<{
         stageId: StageId;
+        revision: number;
         content: string;
         artifact: Artifact | null;
         /** Present only for the 'requirements' artifact kind. */
@@ -89,7 +103,7 @@ export const api = {
   setSubtasks: (
     repoId: string,
     ticketId: string,
-    subtasks: Array<{ description: string; prompt?: string; requirementRef?: string }>
+    subtasks: Array<Partial<Subtask> & { description: string }>
   ) =>
     fetch(`/api/repos/${repoId}/specs/${ticketId}/develop/subtasks`, {
       method: 'PUT',

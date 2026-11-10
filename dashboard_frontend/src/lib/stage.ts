@@ -6,7 +6,9 @@ import type { AiStatus, GateStatus, SpecFile, StageId, TemplateSource } from '..
  * can still be in progress even after the Phase A gate is approved.
  */
 export function currentStageId(spec: SpecFile): StageId {
+  if (spec.currentStageId) return spec.currentStageId;
   for (const stage of spec.stages) {
+    if (stage.skipped) continue;
     if (
       stage.gate.status !== 'approved' ||
       (stage.aiStatus !== 'done' && stage.aiStatus !== 'stubbed')

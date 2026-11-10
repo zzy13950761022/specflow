@@ -27,11 +27,13 @@ export function StagePanel({
   ticketId,
   stage,
   spec,
+  onReviewReady,
 }: {
   repoId: string;
   ticketId: string;
   stage: Stage;
   spec: SpecFile;
+  onReviewReady?: (review: { stageId: Stage['id']; revision: number } | null) => void;
 }) {
   const [content, setContent] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
@@ -43,6 +45,7 @@ export function StagePanel({
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    onReviewReady?.(null);
     setErr(null);
     api
       .getArtifact(repoId, ticketId, stage.id)
@@ -51,6 +54,7 @@ export function StagePanel({
         setContent(res.content);
         setArtifact(res.artifact);
         setData(res.data ?? null);
+        onReviewReady?.({ stageId: stage.id, revision: res.revision });
       })
       .catch((e) => {
         if (!alive) return;
@@ -63,7 +67,7 @@ export function StagePanel({
     return () => {
       alive = false;
     };
-  }, [repoId, ticketId, stage.id, stage.aiStatus, stage.gate.status]);
+  }, [repoId, ticketId, stage.id, stage.aiStatus, stage.gate.status, stage.revision, stage.stale, onReviewReady]);
 
   const markdownMetrics = artifact?.kind === 'markdown' ? artifact.metrics : undefined;
 
@@ -98,6 +102,18 @@ export function StagePanel({
       </div>
 
       {/* body */}
+      <p className="text-xs text-slate-500">Artifact revision: {stage.revision} {stage.gate.actor === 'policy' ? '· approved by check policy' : ''}</p>
+      {stage.skipped && <p className="rounded-lg bg-slate-100 p-3 text-sm">Skipped: {stage.skipReason}</p>}
+      {stage.stale && stage.artifact && <p className="rounded-lg bg-orange-100 p-3 text-sm" role="status">Outdated artifact: {stage.staleReason}. This content is retained for reference and requires rework.</p>}
+      {stage.evidence && (
+        <div className="rounded-lg bg-blue-50 p-3 text-sm flex flex-col gap-1">
+          <strong>Recorded execution evidence</strong>
+          <span>Exit code: {stage.evidence.exitCode ?? 'terminated'} · {stage.evidence.timedOut ? 'timed out' : stage.evidence.finishedAt}</span>
+          {stage.evidence.coverage !== undefined && <span>Measured line coverage: {Math.round(stage.evidence.coverage * 100)}%</span>}
+          <span className="text-xs break-all">Run: {stage.evidence.runId} · Output: {stage.evidence.outputPath}</span>
+          {stage.evidence.codeChanged && <span className="text-red-600">Code changed during execution; run again.</span>}
+        </div>
+      )}
       <div className="flex-1">
         {loading && <p className="text-sm text-slate-500">Loading…</p>}
         {err && <p className="text-sm text-red-600">{err}</p>}

@@ -59,6 +59,7 @@ function SpecRow({ repoId, spec }: { repoId: string; spec: SpecFile }) {
         </div>
 
         {/* status labels: active stage · gateStatus */}
+        <span className="text-[11px] text-slate-500">{spec.execution.status.replaceAll('_', ' ')}</span>
         <div className="flex items-center gap-2 shrink-0 ml-2">
           <span className="text-[11px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-800">
             {STAGE_LABELS[activeStageId]}

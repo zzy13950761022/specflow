@@ -1,6 +1,8 @@
 import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
+import { randomUUID } from 'crypto';
 import { SpecFileSchema, type SpecFile, type StageId, type Artifact, type ArtifactInput } from './schemas.js';
+import { isCompletedLegacySpec, restoreLegacyCompletion } from './legacy-completion.js';
 
 /**
  * Reads/writes spec files inside a repo's .specflow directory. Files are the
@@ -17,6 +19,7 @@ export class SpecStore {
   }
 
   private specJsonPath(repoPath: string, ticketId: string): string {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(ticketId)) throw new Error('ticketId must contain only letters, numbers, dots, underscores or hyphens and start with a letter or number.');
     return join(this.specflowDir(repoPath), 'specs', `${ticketId}.json`);
   }
 
@@ -56,7 +59,21 @@ export class SpecStore {
   async read(repoPath: string, ticketId: string): Promise<SpecFile | null> {
     try {
       const raw = await fs.readFile(this.specJsonPath(repoPath, ticketId), 'utf-8');
-      return SpecFileSchema.parse(JSON.parse(raw));
+      const spec = SpecFileSchema.parse(JSON.parse(raw));
+      if (isCompletedLegacySpec(spec)) return restoreLegacyCompletion(spec);
+      if (spec.schemaVersion < 3) {
+        spec.schemaVersion = 3;
+        for (const stage of spec.stages) {
+          stage.subtasks?.forEach((task) => { task.completed = false; task.status = 'pending'; task.claimId = undefined; task.attempt++; });
+          if (stage.artifact) stage.revision = Math.max(stage.revision, 1);
+          if (stage.gate.status === 'approved') {
+            stage.gate.status = 'pending_review';
+            stage.gate.approvedRevision = undefined;
+          }
+        }
+        spec.currentStageId = 'spec';
+      }
+      return spec;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return null;
       throw err;
@@ -66,13 +83,38 @@ export class SpecStore {
   /** Validate + atomically persist a spec file. */
   async write(repoPath: string, spec: SpecFile): Promise<SpecFile> {
     const validated = SpecFileSchema.parse(spec);
-    return this.withLock(repoPath, spec.ticketId, async () => {
-      const target = this.specJsonPath(repoPath, spec.ticketId);
+    return this.transaction(repoPath, spec.ticketId, async () => validated);
+  }
+
+  /** Disk lock includes the read and domain mutation, shared by independent processes. */
+  async transaction(repoPath: string, ticketId: string, mutate: (spec: SpecFile | null) => Promise<SpecFile>): Promise<SpecFile> {
+    return this.withLock(repoPath, ticketId, async () => {
+      const target = this.specJsonPath(repoPath, ticketId);
+      const lock = `${target}.lock`;
       await fs.mkdir(dirname(target), { recursive: true });
-      const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(validated, null, 2), 'utf-8');
-      await fs.rename(tmp, target);
-      return validated;
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        try { await fs.mkdir(lock); break; } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+          try {
+            const owner = JSON.parse(await fs.readFile(join(lock, 'owner.json'), 'utf8'));
+            try { process.kill(owner.pid, 0); } catch (e) {
+              if ((e as NodeJS.ErrnoException).code === 'ESRCH') await fs.rm(lock, { recursive: true, force: true });
+            }
+          } catch {
+            const stat = await fs.stat(lock).catch(() => null);
+            if (stat && Date.now() - stat.mtimeMs > 30_000) await fs.rm(lock, { recursive: true, force: true });
+          }
+          if (Date.now() >= deadline) throw new Error('Ticket is busy; retry the operation.');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      }
+      try {
+        await fs.writeFile(join(lock, 'owner.json'), JSON.stringify({ pid: process.pid }));
+        const spec = SpecFileSchema.parse(await mutate(await this.read(repoPath, ticketId)));
+        await this.atomicWrite(target, JSON.stringify(spec, null, 2));
+        return spec;
+      } finally { await fs.rm(lock, { recursive: true, force: true }); }
     });
   }
 
@@ -92,7 +134,7 @@ export class SpecStore {
     content: string,
     specPath: string,
     artifactInput?: ArtifactInput
-  ): Promise<{ artifact: Artifact; history: { path: string; at: string } }> {
+  ): Promise<{ artifact: Artifact; history: { path: string; at: string; artifact: Artifact } }> {
     const kind = artifactInput?.kind ?? 'markdown';
     const rel =
       stageId === 'spec'
@@ -109,7 +151,7 @@ export class SpecStore {
       'artifacts',
       ticketId,
       'history',
-      `${stageId}-${at.replace(/[:.]/g, '-')}.md`
+      `${stageId}-${at.replace(/[:.]/g, '-')}-${randomUUID()}.md`
     );
     await this.atomicWrite(join(repoPath, historyRel), content);
 
@@ -154,13 +196,19 @@ export class SpecStore {
       };
     }
 
-    return { artifact, history: { path: historyRel, at } };
+    let historicalArtifact: Artifact = { ...artifact, path: historyRel };
+    if (artifact.kind === 'requirements' && artifactInput?.kind === 'requirements') {
+      const dataPath = historyRel.slice(0, -3) + '.json';
+      await this.atomicWrite(join(repoPath, dataPath), JSON.stringify(artifactInput.data, null, 2));
+      historicalArtifact = { ...artifact, path: historyRel, dataPath };
+    }
+    return { artifact, history: { path: historyRel, at, artifact: historicalArtifact } };
   }
 
   /** Atomic file write (temp + rename), creating parent dirs as needed. */
   private async atomicWrite(abs: string, content: string): Promise<void> {
     await fs.mkdir(dirname(abs), { recursive: true });
-    const tmp = `${abs}.${process.pid}.${Date.now()}.tmp`;
+    const tmp = `${abs}.${process.pid}.${randomUUID()}.tmp`;
     await fs.writeFile(tmp, content, 'utf-8');
     await fs.rename(tmp, abs);
   }

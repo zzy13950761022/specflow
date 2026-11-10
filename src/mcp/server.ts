@@ -2,9 +2,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { AppCore } from '../core/app-core.js';
-import { StageIdSchema, ImplArtifactsSchema, RequirementsDataSchema, type ArtifactInput } from '../core/schemas.js';
+import { StageIdSchema, ImplArtifactsSchema, RequirementsDataSchema, WorkflowOptionsSchema, SpecFileSchema, SubtaskInputSchema, type ArtifactInput } from '../core/schemas.js';
 import { GateNotApprovedError } from '../core/stage-machine.js';
 import { logger } from '../core/logger.js';
+import { registerWorkflowTools } from './workflow-tools.js';
+import { completionAction } from '../core/execution.js';
 
 /**
  * Thin MCP transport. Every handler delegates to AppCore and never embeds
@@ -23,22 +25,9 @@ function fail(message: string, code?: string) {
   };
 }
 
-function buildResult(stageId: string, gate: { status: string; comment?: string; reviewedAt?: string } | undefined) {
-  const nextSteps: string[] = [];
-  if (gate?.status === 'pending_review') {
-    nextSteps.push('Gate timed out still pending review. Call get_approval_status again to keep waiting.');
-  } else if (gate?.status === 'needs_revision') {
-    nextSteps.push(`Gate needs revision. Comment: "${gate.comment ?? ''}". Call get_stage_prompt to get the prompt, regenerate the output addressing the comment, then call record_ai_output.`);
-  } else if (gate?.status === 'rejected') {
-    nextSteps.push(`Gate was rejected. Comment: "${gate.comment ?? ''}". Call get_stage_prompt, regenerate addressing the comment, then call record_ai_output.`);
-  } else if (gate?.status === 'approved') {
-    nextSteps.push('Gate is approved. Call advance_stage to move to the next stage.');
-  }
-  return { stageId, gate, nextSteps };
-}
-
 export function buildMcpServer(app: AppCore): McpServer {
   const server = new McpServer({ name: 'ai-pilot', version: '0.1.0' });
+  registerWorkflowTools(server, app);
 
   server.registerTool(
     'list_repos',
@@ -81,18 +70,18 @@ export function buildMcpServer(app: AppCore): McpServer {
     'create_spec',
     {
       description:
-        'Create a new 8-stage spec for a ticket. Derives specPath from the title. ' +
+        'Create a ticket with a standard, bugfix or documentation workflow template. Derives specPath from the title. ' +
         'Then proceed directly to get_stage_prompt — repo-specific prompt templates are ' +
         'NOT auto-generated. The templateStatus field reports whether this repo has ' +
         'user-provided templates ("ready") or will fall back to the built-in blueprint ' +
         'defaults ("none"); either way get_stage_prompt resolves the right prompt. ' +
         'Creating repo templates is optional and user-driven (see propose_repo_templates / ' +
         'write_repo_template, or add .specflow/templates/{stage}.md by hand).',
-      inputSchema: { repoId: z.string(), ticketId: z.string(), title: z.string() },
+      inputSchema: { repoId: z.string(), ticketId: z.string().min(1), title: z.string().min(1), ...WorkflowOptionsSchema.shape },
     },
-    async ({ repoId, ticketId, title }) => {
+    async ({ repoId, ticketId, title, ...options }) => {
       try {
-        const spec = await app.createSpec(repoId, ticketId, title);
+        const spec = await app.createSpec(repoId, ticketId, title, options);
         const templates = await app.listTemplates(repoId);
         const hasRepoTemplates = templates.some(
           (t) => t.source === 'repo-curated' || t.source === 'repo-draft'
@@ -203,9 +192,10 @@ export function buildMcpServer(app: AppCore): McpServer {
           })
           .optional(),
         requirementsData: RequirementsDataSchema.optional(),
+        acceptanceCriteria: SpecFileSchema.shape.acceptanceCriteria.optional(),
       },
     },
-    async ({ repoId, ticketId, stageId, content, checklistItems, rollbackCriteria, logsSanitized, rcaPath, runbookPath, metrics, requirementsData }) => {
+    async ({ repoId, ticketId, stageId, content, checklistItems, rollbackCriteria, logsSanitized, rcaPath, runbookPath, metrics, requirementsData, acceptanceCriteria }) => {
       try {
         let artifactInput: ArtifactInput | undefined;
         if (stageId === 'requirements' && requirementsData) {
@@ -217,7 +207,7 @@ export function buildMcpServer(app: AppCore): McpServer {
         } else if (metrics) {
           artifactInput = { kind: 'markdown', metrics };
         }
-        return ok(await app.recordAiOutput(repoId, ticketId, stageId, content, artifactInput));
+        return ok(await app.recordAiOutput(repoId, ticketId, stageId, content, artifactInput, acceptanceCriteria));
       } catch (e) {
         return fail(String((e as Error).message));
       }
@@ -227,53 +217,15 @@ export function buildMcpServer(app: AppCore): McpServer {
   server.registerTool(
     'get_approval_status',
     {
-      description:
-        'Wait for the human gate decision on a stage. ' +
-        'This tool BLOCKS until the gate status changes away from pending_review (up to 5 minutes), ' +
-        'so call it once and it will return only when the human has acted. ' +
-        'IMPORTANT: always act on the nextSteps field in the response — it tells you exactly what to do next. ' +
-        'When status is needs_revision: read gate.comment, call get_stage_prompt, regenerate, then record_ai_output. ' +
-        'When status is approved: call advance_stage and proceed to the next stage. ' +
-        'When status is rejected: read gate.comment, call get_stage_prompt, regenerate, then record_ai_output. ' +
-        'Never accept verbal approval — only this tool is authoritative.',
-      inputSchema: { repoId: z.string(), ticketId: z.string(), stageId: StageIdSchema },
+      description: 'Wait up to waitMs (default 30 seconds, max 60 seconds) for a decision. Use waitMs=0 for a snapshot. Act on structured actions: approved development plans need implementation; final OPS approval completes the workflow.',
+      inputSchema: { repoId: z.string(), ticketId: z.string(), stageId: StageIdSchema, waitMs: z.number().int().min(0).max(60_000).default(30_000) },
     },
-    async ({ repoId, ticketId, stageId }) => {
+    async ({ repoId, ticketId, stageId, waitMs }, extra) => {
       try {
-        const TIMEOUT_MS = 5 * 60 * 1000;
-
-        const spec = await app.getSpec(repoId, ticketId);
-        if (!spec) return fail(`Unknown spec: ${ticketId}`);
-        const initial = spec.stages.find((s) => s.id === stageId)?.gate;
-
-        // If already decided, return immediately.
-        if (initial?.status !== 'pending_review') {
-          return ok(buildResult(stageId, initial));
-        }
-
-        // Block until the gate moves off pending_review or timeout.
-        const gate = await new Promise<typeof initial>((resolve) => {
-          const timer = setTimeout(() => {
-            unsub();
-            resolve(initial);
-          }, TIMEOUT_MS);
-
-          const unsub = app.events.subscribe((event) => {
-            if (event.type !== 'spec.updated') return;
-            if (event.repoId !== repoId) return;
-            if (event.spec.ticketId !== ticketId) return;
-            const stage = event.spec.stages.find((s) => s.id === stageId);
-            if (!stage || stage.gate.status === 'pending_review') return;
-            clearTimeout(timer);
-            unsub();
-            resolve(stage.gate);
-          });
-        });
-
-        return ok(buildResult(stageId, gate));
-      } catch (e) {
-        return fail(String((e as Error).message));
-      }
+        const gate = await app.waitForApproval(repoId, ticketId, stageId, waitMs, extra.signal);
+        const execution = await app.getExecutionStatus(repoId, ticketId);
+        return ok({ stageId, gate, execution, actions: execution.actions, nextSteps: execution.actions.map((action) => action.tool + ': ' + action.reason) });
+      } catch (error) { return fail(String((error as Error).message)); }
     }
   );
 
@@ -299,7 +251,7 @@ export function buildMcpServer(app: AppCore): McpServer {
     'request_revision',
     {
       description:
-        'Third gate verdict: ask Claude to revise the output without fully rejecting it. ' +
+        'Third gate verdict: request revision of the output without fully rejecting it. ' +
         'Sets gate to needs_revision and aiStatus to in_progress so Claude can re-record. ' +
         'advance_stage is still refused until the gate is approved.',
       inputSchema: {
@@ -322,19 +274,13 @@ export function buildMcpServer(app: AppCore): McpServer {
     'set_develop_subtasks',
     {
       description:
-        'Replace the DEVELOP stage subtask checklist wholesale. Each entry has a ' +
-        'description and optional prompt (per-subtask AI guidance) and requirementRef. ' +
-        'Existing subtasks are discarded. aiStatus is derived automatically.',
+        'Replace the DEVELOP implementation plan with stable task IDs, descriptions, ' +
+        'optional prompts, requirementRef, testRefs, dependsOn and repository-relative files. ' +
+        'Changes invalidate plan approval; resubmit the plan before coding. Release running claims before replacing it.',
       inputSchema: {
         repoId: z.string(),
         ticketId: z.string(),
-        subtasks: z.array(
-          z.object({
-            description: z.string().min(1),
-            prompt: z.string().optional(),
-            requirementRef: z.string().optional(),
-          })
-        ),
+        subtasks: z.array(SubtaskInputSchema),
       },
     },
     async ({ repoId, ticketId, subtasks }) => {
@@ -368,15 +314,17 @@ export function buildMcpServer(app: AppCore): McpServer {
     {
       description:
         'Record a subtask implementation after the code is written to disk. ' +
-        'MANDATORY: call this for every subtask BEFORE toggling it completed. ' +
-        'A subtask without an implementation log is NOT complete. ' +
+        'Record a current-revision and current-attempt log BEFORE set_subtask_completed. ' +
+        'Claimed tasks require the current claimId. A task without a valid implementation log is NOT complete. ' +
         'The log feeds context to subsequent test/build stages so they know what was built. ' +
-        'artifacts must include at least one of: apiEndpoints, components, functions, classes, integrations.',
+        'Document relevant apiEndpoints, components, functions, classes or integrations. ' +
+        'File-only changes may use artifacts={} when filesModified or filesCreated is nonempty.',
       inputSchema: {
         repoId: z.string(),
         ticketId: z.string(),
         subtaskId: z.string(),
         summary: z.string().min(1),
+        claimId: z.string().optional(),
         filesModified: z.array(z.string()),
         filesCreated: z.array(z.string()),
         statistics: z.object({
@@ -386,17 +334,16 @@ export function buildMcpServer(app: AppCore): McpServer {
         artifacts: ImplArtifactsSchema,
       },
     },
-    async ({ repoId, ticketId, subtaskId, summary, filesModified, filesCreated, statistics, artifacts }) => {
+    async ({ repoId, ticketId, subtaskId, summary, filesModified, filesCreated, statistics, artifacts, claimId }) => {
       try {
         const log = await app.logImplementation(repoId, ticketId, subtaskId, {
-          summary, filesModified, filesCreated, statistics, artifacts,
+          summary, filesModified, filesCreated, statistics, artifacts, claimId,
         });
         return ok({
           ok: true,
           logId: log.id,
-          nextSteps: [
-            `Implementation logged. Now call toggle_subtask to mark subtask "${subtaskId}" completed, then move to the next subtask.`,
-          ],
+          actions: [completionAction(subtaskId, claimId)],
+          nextSteps: [completionAction(subtaskId, claimId).tool + ': ' + completionAction(subtaskId, claimId).reason],
         });
       } catch (e) {
         return fail(String((e as Error).message));

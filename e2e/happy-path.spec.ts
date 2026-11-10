@@ -62,14 +62,15 @@ test('happy path: add repo, create spec, Claude records output, human approves, 
 
   // Add a repo by path. The native Finder picker can't be automated, so use
   // the manual-entry fallback (toggle it open first).
-  await page.getByRole('button', { name: 'or enter a path manually' }).click();
+  await page.getByRole('button', { name: 'or path', exact: true }).click();
   await page.getByPlaceholder('/path/to/repo').fill(repo);
-  await page.getByRole('button', { name: 'Add by path' }).click();
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.getByText(repo, { exact: false })).toBeVisible();
 
   // Create a spec via the UI.
   await page.getByPlaceholder('TICKET-123').fill('E2E-1');
   await page.getByPlaceholder('Feature title').fill('Checkout Tax');
+  await page.getByLabel('Workflow type').selectOption('bugfix');
   await page.getByRole('button', { name: 'Create spec' }).click();
   await expect(page.getByText('E2E-1').first()).toBeVisible();
 
@@ -86,19 +87,26 @@ test('happy path: add repo, create spec, Claude records output, human approves, 
     await claude.close();
   }
 
-  // The "Review & approve" button appears once the gate is pending_review (live via WS).
-  const reviewApprove = page.getByRole('button', { name: 'Review & approve', exact: true }).first();
-  await expect(reviewApprove).toBeVisible({ timeout: 10000 });
-
-  // Human opens the review modal and approves.
-  await reviewApprove.click();
-  const approveInModal = page.getByRole('button', { name: 'Approve', exact: true }).first();
-  await expect(approveInModal).toBeVisible({ timeout: 5000 });
-  await approveInModal.click();
-
-  // Once SPEC's gate is approved, the card advances to the REQUIREMENTS lane
-  // (the board places a spec in its first non-approved stage), whose gate is
-  // not_ready — so no "Review & approve" button remains visible for this card.
-  await expect(page.getByText('E2E-1').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Review & approve', exact: true })).toHaveCount(0, { timeout: 10000 });
+  // Open the review in the detail page; approval waits for content loading.
+  await page.getByText('E2E-1').first().click();
+  const approve = page.getByRole('button', { name: 'Approve', exact: true });
+  await expect(approve).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText('The spec', { exact: true })).toBeVisible();
+  await approve.click();
+  await expect(page.getByRole('button', { name: 'Advance stage', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Advance stage', exact: true }).click();
+  const specUrl = 'http://127.0.0.1:' + PORT + '/api/repos/' + repoId + '/specs/E2E-1';
+  await expect.poll(async () => (await (await fetch(specUrl)).json()).currentStageId).toBe('develop');
+  await expect(page.getByText('skipped', { exact: true })).toHaveCount(2);
+  await page.getByRole('button', { name: 'Select SPEC', exact: true }).click();
+  await page.getByRole('button', { name: 'Reopen stage', exact: true }).click();
+  await page.getByLabel('Rework reason').fill('Acceptance criteria changed');
+  await page.getByRole('button', { name: 'Confirm rework', exact: true }).click();
+  await expect.poll(async () => (await (await fetch(specUrl)).json()).currentStageId).toBe('spec');
+  await expect(page.getByText('Outdated artifact:', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Pause execution', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Resume execution', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Resume execution', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Pause execution', exact: true })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/ai-pilot-workflow-e2e.png', fullPage: true });
 });
