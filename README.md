@@ -15,8 +15,7 @@ SPEC → REQUIREMENTS → DESIGN → DEVELOP → TEST → BUILD → DEPLOY → O
 **Prerequisites:** Node.js 20+, an MCP-compatible coding client
 
 ```bash
-git clone <this-repo>
-cd ai-pilot
+# From the AI Pilot component directory (mcp/ai-pilot in the team repository):
 npm install
 npm run build
 ```
@@ -28,7 +27,8 @@ node dist/index.js --dashboard
 # Opens at http://127.0.0.1:4123
 ```
 
-**2. Register the MCP server** in your project repo's `.mcp.json`:
+**2. Register the MCP server** in your coding client. For **Claude Code**, merge
+this entry into your project repo's `.mcp.json`:
 
 ```json
 {
@@ -41,12 +41,28 @@ node dist/index.js --dashboard
 }
 ```
 
-**3. Open Claude Code** inside your project repo and say:
+For **Codex**, merge the following table into your user-level
+`~/.codex/config.toml` (see the [official MCP configuration guide](https://developers.openai.com/codex/mcp/)):
+
+```toml
+[mcp_servers.ai-pilot]
+command = "/absolute/path/to/node"
+args = ["/absolute/path/to/ai-pilot/dist/index.js"]
+```
+
+Use the absolute path to your Node.js 20+ executable and this checkout's built
+entry point. Codex does not use Claude's project `.mcp.json` for this registration.
+For **OpenCode**, follow the team setup guide below. Reload the client after
+registration; installing the shared skill alone does not register an MCP server.
+
+**3. Open your coding client** inside your project repo and say:
 
 > "Create a spec for TICKET-123 — Add coupon discount to the shopping cart"
 
-Claude will run the full 8-stage workflow. After each stage it waits for your approval
-in the dashboard before continuing.
+The assistant drives the workflow and waits for approval in the dashboard before
+advancing. The standard template uses all 8 stages; bugfix and documentation
+templates select their own stages. TEST/BUILD policy approval requires explicit
+low-risk opt-in and successful platform checks.
 
 ---
 
@@ -63,7 +79,7 @@ Two transports share one domain core and cross-process ticket transactions:
 
 | Component | Role |
 |-----------|------|
-| **MCP server** (stdio) | Claude Code connects here and calls tools |
+| **MCP server** (stdio) | The coding client connects here and calls tools |
 | **Dashboard** (Fastify + React, `127.0.0.1:4123`) | Human reviews and approves/rejects each stage |
 | **AppCore** | Shared singleton — every mutation flows `mutate → persist → emit` |
 
@@ -95,21 +111,25 @@ gate:       not_ready   → pending_review → approved
 
 The dashboard offers three verdicts when reviewing:
 - **Approve** — approve the reviewed revision; advance separately when ready
-- **Revise** — minor changes needed; Claude re-generates with your comment
-- **Reject** — direction is wrong; Claude re-generates with your comment
+- **Revise** — minor changes needed; the assistant re-generates with your comment
+- **Reject** — direction is wrong; the assistant re-generates with your comment
 
-Inline review annotations let you select markdown text and attach revision notes.
+Inline review annotations let you select text in the current, non-stale markdown
+artifact awaiting review and attach revision notes.
 Revise combines those notes with an optional overall comment. Draft annotations
 are scoped to the current ticket, stage and artifact revision; new revisions
-start fresh. Approve, Revise and Reject remain bound to the loaded revision.
+start fresh. Reloading the page also clears drafts; notes are saved in the gate
+comment/history when you submit Revise. Structured requirements views do not use
+the markdown annotation editor. Approve, Revise and Reject remain bound to the
+loaded revision.
 
 ### Develop stage — two-phase flow
 
 The develop stage has an explicit plan-before-code structure:
 
-1. **Phase A (gated)** — Claude generates a task list and implementation plan, submits
+1. **Phase A (gated)** — The assistant generates a task list and implementation plan, submits
    via `record_ai_output`. You review and approve in the dashboard.
-2. **Phase B (no extra gate)** — Claude implements each subtask with Write/Edit tools,
+2. **Phase B (no extra gate)** — The assistant implements each subtask with its coding tools,
    then calls `log_implementation` (mandatory) to record what was built before marking
    the subtask done.
 
@@ -118,7 +138,7 @@ mark it outdated. Changing tasks after an artifact exists invalidates that plan
 and its approval; submit the updated plan for review before implementing.
 
 Implementation logs (`.specflow/impl-logs/`) feed context into the test and build stages
-so Claude knows exactly what was created without re-reading the whole codebase.
+so the assistant knows what was created without re-reading the whole codebase.
 
 ### Per-repo prompt templates
 
@@ -183,6 +203,14 @@ file beneath repository `coverage/`, without symlink traversal; the old report i
 removed before testing. AI metrics are descriptive and cannot satisfy gates.
 Missing configuration, failure, timeout or source drift blocks approval and
 advancement, including downstream use of stale TEST evidence.
+
+For Maven projects using JaCoCo, configure the test command or a wrapper to run
+tests, generate a fresh XML report, and convert its report-level `LINE` counter
+to `coverage/coverage-summary.json`. The required shape is, for example,
+`{"total": {"lines": {"total": 100, "covered": 85, "pct": 85}}}`.
+Use measured counts (`total = missed + covered`, `pct = covered / total * 100`);
+propagate test/conversion failures and reject missing or stale JaCoCo reports.
+AI Pilot reads the JSON summary, not JaCoCo XML directly.
 
 Fingerprints exclude directories named `.git`, `.specflow`, `node_modules` and
 these exact repository-relative generated paths: `dist`, `build`, `coverage`,
@@ -283,90 +311,6 @@ Installer tests: `python3 -m unittest discover -s tests/skills -p test_install_s
 Behavioral evaluation scenarios are in `tests/skills/specflow-scenarios.json`; run
 them as simulated skill applications without operating on live tickets.
 
-## Personal and team repository synchronization
-
-The standalone repository and the team's `mcp/ai-pilot` directory use two-way Git
-subtree merges. Teammates work and commit normally in the monorepo; the maintainer
-handles synchronization. A personal GitHub remote and a team GitHub remote can be
-used independently. The maintained Specflow skill travels with the component at
-`skills/specflow`; changing the team's top-level skill entry point requires a
-separate review of its platform conventions.
-
-```bash
-python3 scripts/sync-ai-pilot.py status
-python3 scripts/sync-ai-pilot.py import # Team → standalone preview
-scripts/sync-to-gp.sh                  # Standalone → team preview
-```
-
-Defaults are this checkout and `~/Project/Giant-Panda-AI-Tools-main`, with prefix
-`mcp/ai-pilot`. Override with `--source`, `--team`, `--prefix`, `--source-ref` and
-`--team-ref`. The tool uses local committed refs; fetch the relevant remote
-branches first and select the intended refs. Status compares committed trees and
-reports dirty working trees separately. It does not include uncommitted features.
-
-For the first synchronization, establish shared ancestry from **reviewed historical
-bases**. In these local checkouts, `a837ec2` is a candidate team base and `4721fc1`
-is the corresponding standalone commit. Their trees differ, so review baseline
-conflicts rather than treating these commits as identical. Select a source base
-that precedes the changes you intend to merge:
-
-```bash
-python3 scripts/sync-ai-pilot.py bootstrap \
-  --source-base 4721fc1 --team-base a837ec2 \
-  --workspace /tmp/ai-pilot-bootstrap --apply
-```
-
-Both input checkouts must be clean before `--apply`; review and commit intended
-changes first, leaving private local configuration out of Git. The operation
-creates isolated clones and a `codex/ai-pilot-*` result branch. Input checkouts
-remain untouched. Only tracked committed content is merged; already tracked
-configuration is still tracked and must be reviewed. No automatic push occurs.
-
-If JSON reports `status: conflict` (exit 2), resolve the listed files in
-`result.repo`, stage them with `git add`, then run:
-
-```bash
-python3 scripts/sync-ai-pilot.py continue \
-  --workspace /tmp/ai-pilot-bootstrap --apply
-```
-
-Unresolved conflicts remain paused. `operation.json` records source/team/split
-SHAs, merge steps and the result SHA. Keep this workspace until the result is
-reviewed and integrated. Output clones have local input repos as their `origin`,
-so publish to the appropriate remote explicitly. Retain the merge history:
-**squashing or cherry-picking a sync result loses ancestry needed by later syncs.**
-For example, after reviewing the standalone result:
-
-```bash
-# In the original standalone checkout; replace RESULT_BRANCH from JSON.
-git fetch /tmp/ai-pilot-bootstrap/source RESULT_BRANCH
-git switch -c codex/review-ai-pilot-sync FETCH_HEAD
-# Review and test this branch, then publish it explicitly for a merge PR.
-```
-
-After integrating the bootstrap result into the standalone branch, use incremental
-operations with new workspace paths:
-
-```bash
-python3 scripts/sync-ai-pilot.py import --workspace /tmp/ai-pilot-import --apply
-python3 scripts/sync-ai-pilot.py export --workspace /tmp/ai-pilot-export --apply
-```
-
-Review and integrate the import result before exporting it (or pass its clone as
-`--source`). Review the export branch in the team clone before publishing a team
-PR. Export preserves files outside the prefix and can incorporate concurrent
-team edits. `needsFollowupImport: true` means those team changes still need to be
-imported into standalone; it does not discard them to force equality. Fetch and
-merge newer target changes and rerun relevant tests before publication.
-
-Use `status --require-equal` as a release/CI check: exit 1 means the selected
-committed trees differ. Two independent repos are synchronized at recorded SHAs,
-not atomically or continuously. To cancel a conflicted operation, leave the
-original repos alone and discard its temporary workspace when no longer needed.
-
-Sync regression tests: `python3 -m unittest discover -s tests/sync -p 'test_*.py'`.
-Design: [repository sync spec](docs/superpowers/specs/2026-11-10-repository-sync-design.md).
-
 ## MCP tools reference
 
 | Tool | Description |
@@ -412,7 +356,7 @@ After any code change:
 
 ```bash
 npm run build           # Recompile dist/index.js
-# Then restart the MCP server (reload Claude Code or run /mcp)
+# Restart the dashboard and reload/reconnect the MCP server in your coding client.
 ```
 
 ### Architecture invariants
