@@ -7,11 +7,13 @@ import {
   STAGE_LABELS,
   type Artifact,
   type DeployChecklistArtifact,
+  type InlineAnnotation,
   type OpsReportArtifact,
   type RequirementsData,
   type SpecFile,
   type Stage,
 } from '../types';
+import { AnnotatableMarkdown } from './AnnotatableMarkdown';
 import { DeployChecklistView } from './DeployChecklistView';
 import { DevelopSubtasks } from './DevelopSubtasks';
 import { OpsReportView } from './OpsReportView';
@@ -28,23 +30,31 @@ export function StagePanel({
   stage,
   spec,
   onReviewReady,
+  annotations,
+  onAnnotationSave,
+  onAnnotationRemove,
 }: {
   repoId: string;
   ticketId: string;
   stage: Stage;
   spec: SpecFile;
-  onReviewReady?: (review: { stageId: Stage['id']; revision: number } | null) => void;
+  onReviewReady?: (review: { stageId: Stage["id"]; revision: number } | null) => void;
+  annotations: InlineAnnotation[];
+  onAnnotationSave: (a: InlineAnnotation) => void;
+  onAnnotationRemove: (id: string) => void;
 }) {
   const [content, setContent] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [data, setData] = useState<RequirementsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [artifactRevision, setArtifactRevision] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   // Refetch when the stage changes, or when it re-generates (aiStatus / gate flips).
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setArtifactRevision(null);
     onReviewReady?.(null);
     setErr(null);
     api
@@ -54,6 +64,7 @@ export function StagePanel({
         setContent(res.content);
         setArtifact(res.artifact);
         setData(res.data ?? null);
+        setArtifactRevision(res.revision);
         onReviewReady?.({ stageId: stage.id, revision: res.revision });
       })
       .catch((e) => {
@@ -137,6 +148,10 @@ export function StagePanel({
             metrics={markdownMetrics}
             repoId={repoId}
             spec={spec}
+            annotatable={stage.gate.status === 'pending_review' && !stage.stale && stage.id === spec.currentStageId && artifactRevision === stage.revision}
+            annotations={annotations}
+            onAnnotationSave={onAnnotationSave}
+            onAnnotationRemove={onAnnotationRemove}
           />
         )}
       </div>
@@ -152,6 +167,10 @@ function StageBody({
   metrics,
   repoId,
   spec,
+  annotatable,
+  annotations,
+  onAnnotationSave,
+  onAnnotationRemove,
 }: {
   stageId: Stage['id'];
   content: string;
@@ -160,6 +179,10 @@ function StageBody({
   metrics?: { stageCoverage?: number; buildSuccess?: boolean; cycleTimeMs?: number };
   repoId: string;
   spec: SpecFile;
+  annotatable: boolean;
+  annotations: InlineAnnotation[];
+  onAnnotationSave: (a: InlineAnnotation) => void;
+  onAnnotationRemove: (id: string) => void;
 }) {
   // Structured artifact kinds take priority over the stage switch.
   if (artifact?.kind === 'deploy-checklist') {
@@ -178,7 +201,13 @@ function StageBody({
     case 'develop':
       return (
         <div className="flex flex-col gap-4">
-          <Markdown content={content} />
+          <MarkdownOrAnnotatable
+            content={content}
+            annotatable={annotatable}
+            annotations={annotations}
+            onAnnotationSave={onAnnotationSave}
+            onAnnotationRemove={onAnnotationRemove}
+          />
           <DevelopSubtasks repoId={repoId} spec={spec} />
         </div>
       );
@@ -193,12 +222,17 @@ function StageBody({
               tone={metrics.stageCoverage >= 0.8 ? 'good' : 'warn'}
             />
           )}
-          <Markdown content={content} />
+          <MarkdownOrAnnotatable
+            content={content}
+            annotatable={annotatable}
+            annotations={annotations}
+            onAnnotationSave={onAnnotationSave}
+            onAnnotationRemove={onAnnotationRemove}
+          />
         </div>
       );
 
     case 'build':
-      // Record-display style: build result as a single record, no advance-gate framing.
       return (
         <div className="flex flex-col gap-4">
           {metrics?.buildSuccess !== undefined && (
@@ -208,7 +242,13 @@ function StageBody({
               tone={metrics.buildSuccess ? 'good' : 'bad'}
             />
           )}
-          <Markdown content={content} />
+          <MarkdownOrAnnotatable
+            content={content}
+            annotatable={annotatable}
+            annotations={annotations}
+            onAnnotationSave={onAnnotationSave}
+            onAnnotationRemove={onAnnotationRemove}
+          />
         </div>
       );
 
@@ -218,8 +258,42 @@ function StageBody({
     case 'deploy':
     case 'ops':
     default:
-      return <Markdown content={content} />;
+      return (
+        <MarkdownOrAnnotatable
+          content={content}
+          annotatable={annotatable}
+          annotations={annotations}
+          onAnnotationSave={onAnnotationSave}
+          onAnnotationRemove={onAnnotationRemove}
+        />
+      );
   }
+}
+
+function MarkdownOrAnnotatable({
+  content,
+  annotatable,
+  annotations,
+  onAnnotationSave,
+  onAnnotationRemove,
+}: {
+  content: string;
+  annotatable: boolean;
+  annotations: InlineAnnotation[];
+  onAnnotationSave: (a: InlineAnnotation) => void;
+  onAnnotationRemove: (id: string) => void;
+}) {
+  if (annotatable) {
+    return (
+      <AnnotatableMarkdown
+        content={content}
+        annotations={annotations}
+        onAnnotationSave={onAnnotationSave}
+        onAnnotationRemove={onAnnotationRemove}
+      />
+    );
+  }
+  return <Markdown content={content} />;
 }
 
 function Markdown({ content }: { content: string }) {

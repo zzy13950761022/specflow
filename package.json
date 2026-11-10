@@ -1,7 +1,7 @@
 {
   "name": "@zzf1sh/specflow-ai",
   "version": "0.1.0",
-  "description": "8-stage AI-assisted development workflow platform — Claude Code MCP server + local approval dashboard (SPEC → REQUIREMENTS → DESIGN → DEVELOP → TEST → BUILD → DEPLOY → OPS)",
+  "description": "8-stage AI-assisted development workflow platform \u2014 Claude Code MCP server + local approval dashboard (SPEC \u2192 REQUIREMENTS \u2192 DESIGN \u2192 DEVELOP \u2192 TEST \u2192 BUILD \u2192 DEPLOY \u2192 OPS)",
   "type": "module",
   "bin": {
     "specflow-ai": "dist/index.js"

@@ -181,3 +181,15 @@ body {
   width: 0.9em;
   height: 0.9em;
 }
+
+/* Inline annotation highlight — applied via JS TreeWalker, not Tailwind JIT */
+.annotation-mark {
+  background: #fff3e0;
+  border-bottom: 2px solid #f97316;
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0 1px;
+}
+.annotation-mark:hover {
+  background: #ffe0b2;
+}

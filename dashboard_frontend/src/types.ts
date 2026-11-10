@@ -113,6 +113,21 @@ export type Artifact =
 
 export type { Stage, SpecFile, Subtask, WorkflowOptions, CheckEvidence } from '../../src/core/schemas';
 
+export interface AnnotationRangeInfo {
+  startXPath: string;
+  startOffset: number;
+  endXPath: string;
+  endOffset: number;
+}
+
+export interface InlineAnnotation {
+  id: string;
+  selectedText: string;
+  comment: string;
+  rangeInfo?: AnnotationRangeInfo;
+  contextSnippet?: string;
+}
+
 export type TemplateSource = 'repo-curated' | 'repo-draft' | 'blueprint-default';
 
 export interface TemplateSummary {

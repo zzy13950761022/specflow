@@ -9,7 +9,7 @@ it('does not label an ungenerated stage as an outdated artifact', () => {
   // Upstream rework may invalidate a stage before any artifact exists.
   stage.stale = true;
   stage.staleReason = 'Upstream rework';
-  const html = renderToStaticMarkup(<StagePanel repoId="repo" ticketId="BUG-1" spec={spec} stage={stage} />);
+  const html = renderToStaticMarkup(<StagePanel repoId="repo" ticketId="BUG-1" spec={spec} stage={stage} annotations={[]} onAnnotationSave={() => {}} onAnnotationRemove={() => {}} />);
   expect(html).not.toContain('Outdated artifact');
 });
 
@@ -19,7 +19,7 @@ it('still warns when rework invalidates an existing artifact', () => {
   stage.artifact = { kind: 'markdown', path: 'old-plan.md' };
   stage.stale = true;
   stage.staleReason = 'Implementation plan changed';
-  const html = renderToStaticMarkup(<StagePanel repoId="repo" ticketId="BUG-1" spec={spec} stage={stage} />);
+  const html = renderToStaticMarkup(<StagePanel repoId="repo" ticketId="BUG-1" spec={spec} stage={stage} annotations={[]} onAnnotationSave={() => {}} onAnnotationRemove={() => {}} />);
   expect(html).toContain('Outdated artifact');
   expect(html).toContain('Implementation plan changed');
 });
