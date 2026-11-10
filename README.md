@@ -1,7 +1,7 @@
 # AI Pilot
 
 A local platform for **AI-assisted software development** across an 8-stage workflow,
-driven by Claude Code over MCP. Human approval is the default; opted-in low-risk
+driven by Claude Code, Codex or OpenCode over MCP. Human approval is the default; opted-in low-risk
 TEST/BUILD can receive policy approval from actual execution evidence.
 
 ```
@@ -12,7 +12,7 @@ SPEC → REQUIREMENTS → DESIGN → DEVELOP → TEST → BUILD → DEPLOY → O
 
 ## Quick start
 
-**Prerequisites:** Node.js 20+, Claude Code CLI
+**Prerequisites:** Node.js 20+, an MCP-compatible coding client
 
 ```bash
 git clone <this-repo>
@@ -49,6 +49,13 @@ Claude will run the full 8-stage workflow. After each stage it waits for your ap
 in the dashboard before continuing.
 
 ---
+
+### OpenCode setup in the team repository
+
+For Giant-Panda-AI-Tools installations, use the [OpenCode setup guide](https://github.tools.sap/cx-commerce/Giant-Panda-AI-Tools/blob/opencode/config/README.md)
+for native skill discovery, dependency installation, environment files and client
+configuration. Launch paths must refer to your checkout. Merge server entries
+into your client configuration to retain unrelated settings.
 
 ## How it works
 
@@ -90,6 +97,11 @@ The dashboard offers three verdicts when reviewing:
 - **Approve** — approve the reviewed revision; advance separately when ready
 - **Revise** — minor changes needed; Claude re-generates with your comment
 - **Reject** — direction is wrong; Claude re-generates with your comment
+
+Inline review annotations let you select markdown text and attach revision notes.
+Revise combines those notes with an optional overall comment. Draft annotations
+are scoped to the current ticket, stage and artifact revision; new revisions
+start fresh. Approve, Revise and Reject remain bound to the loaded revision.
 
 ### Develop stage — two-phase flow
 

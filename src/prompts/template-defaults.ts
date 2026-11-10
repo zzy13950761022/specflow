@@ -11,7 +11,7 @@ export type BlueprintDefaults = Record<StageId, string>;
 export const BLUEPRINT_DEFAULTS: BlueprintDefaults = {
   spec: `# Stage 0 — Spec: {{ticketId}} {{title}}
 
-You are drafting the AI-consumable spec that Claude reads as its primary context
+You are drafting the AI-consumable spec that the AI assistant reads as its primary context
 for every development session on this ticket. Write it to \`.specflow/specs/{{ticketId}}-<feature-name>.md\`.
 
 The spec MUST include:
@@ -22,7 +22,7 @@ The spec MUST include:
 - **Per-exception error handling** (what to do for each failure).
 - **Test framework and file locations** (where tests live in this repo).
 - **Definition of Done.**
-- A **Conventions to Follow** section pointing at the repo's CLAUDE.md memory
+- A **Conventions to Follow** section pointing at the repo's AGENTS.md instructions (fall back to CLAUDE.md for legacy repos)
   files and reference implementations.
 
 Human gate: an engineer completes the spec and passes the pre-handoff checklist
@@ -120,7 +120,7 @@ and approves the plan before any code is written.
 Read get_next_actions. Claim ready subtasks with claim_subtask; independently claimed tasks with nonconflicting files may run concurrently. For each claimed task:
 1. Search existing implementation logs via get_implementation_logs to avoid duplication.
 2. Read the subtask prompt field for role and guidance.
-3. Write the code using Write/Edit tools — follow repo conventions from CLAUDE.md.
+3. Write the code using the current client’s file-editing tools — follow AGENTS.md (or legacy CLAUDE.md).
 4. Call log_implementation with the returned claimId and full artifacts (MANDATORY before marking done):
    - summary, filesModified, filesCreated, statistics
    - artifacts: apiEndpoints / components / functions / classes / integrations

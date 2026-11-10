@@ -156,7 +156,7 @@ export class PromptTemplates {
   }
 
   /**
-   * Inspect the repo and return a generation brief. A Claude agent (the caller)
+   * Inspect the repo and return a generation brief. An AI assistant agent (the caller)
    * uses this brief to draft curated templates, then calls writeRepoTemplate for
    * each stage. The Node process never calls an LLM directly.
    */
