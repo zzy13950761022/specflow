@@ -1,3 +1,4 @@
+import type { AgentDetection } from './types';
 import type { Artifact, RepoEntry, RequirementsData, SpecFile, StageId, TemplateSummary, Subtask } from './types';
 import type { AgentProfile, AgentSettings, CreateSpecOptions, HandoffContext } from './types';
 
@@ -23,7 +24,7 @@ async function reviewFetch(url: string, options: RequestInit = {}): Promise<Resp
 export const api = {
   agentSettings: () => reviewFetch('/api/agents/settings').then((r) => json<AgentSettings>(r)),
   saveAgentSettings: (settings: AgentSettings) => reviewFetch('/api/agents/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(settings) }).then((r) => json<AgentSettings>(r)),
-  detectAgent: (profile: Pick<AgentProfile, 'agent' | 'command' | 'configPath'>) => reviewFetch('/api/agents/detect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(profile) }).then((r) => json<{ available: boolean; version?: string; configPath?: string; provider?: string; model?: string; baseUrl?: string; credentialEnv?: string; error?: string }>(r)),
+  detectAgent: (profile: Pick<AgentProfile, 'agent' | 'command' | 'configPath'>) => reviewFetch('/api/agents/detect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(profile) }).then((r) => json<AgentDetection>(r)),
   testAgent: (profile: AgentProfile) => reviewFetch('/api/agents/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profile }) }).then((r) => json<{ ok: boolean; checks: Array<{ name: string; status: 'passed' | 'failed' | 'skipped'; message: string }> }>(r)),
   handoff: (repoId: string, ticketId: string, transfer = false) => reviewFetch('/api/repos/' + encodeURIComponent(repoId) + '/specs/' + encodeURIComponent(ticketId) + '/handoff', { method: transfer ? 'POST' : 'GET', ...(transfer ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}) }).then((r) => json<HandoffContext>(r)),
   resumeAutomation: (repoId: string, ticketId: string, profileId?: string) => workflowMutation(repoId, ticketId, '/automation/resume', { profileId }),

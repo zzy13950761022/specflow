@@ -1,6 +1,7 @@
+import { configurationLabel } from '../lib/agent-profiles';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { AGENT_LABELS, type AgentSettings, type CreateSpecOptions, type RepoEntry } from '../types';
+import { type AgentSettings, type CreateSpecOptions, type RepoEntry } from '../types';
 import { Dialog } from './Dialog';
 
 export function NewSpec({ repos, activeRepo, onClose, onCreate }: {
@@ -47,8 +48,8 @@ export function NewSpec({ repos, activeRepo, onClose, onCreate }: {
           <label className="field sm:col-span-2">Description<textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the problem, expected outcome, and acceptance criteria…" /></label>
           <label className="field">Change risk<select aria-label="Change risk" value={risk} onChange={(e) => setRisk(e.target.value as typeof risk)}><option value="low">Low risk</option><option value="normal">Normal risk</option><option value="high">High risk</option></select></label>
           <label className="field">Execution<select aria-label="Execution" value={autoRun ? 'dashboard' : 'manual'} onChange={(e) => setAutoRun(e.target.value === 'dashboard')}><option value="manual">Manual / IDE</option><option value="dashboard">Run in Dashboard</option></select></label>
-          <label className="field sm:col-span-2">Agent profile<select aria-label="Agent profile" value={profileId} onChange={(e) => setProfileId(e.target.value)}><option value="">Select an agent profile</option>{settings?.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · {AGENT_LABELS[profile.agent]}</option>)}</select></label>
-          {autoRun && !selectedProfile && <p className="text-sm text-slate-600 sm:col-span-2">Choose a saved profile. Add profiles in Agent settings using the gear in the header.</p>}
+          <label className="field sm:col-span-2">Execution configuration<select aria-label="Execution configuration" value={profileId} onChange={(e) => setProfileId(e.target.value)}><option value="">Select an execution configuration</option>{settings?.profiles.map((profile) => <option key={profile.id} value={profile.id}>{configurationLabel(profile)}</option>)}</select></label>
+          {autoRun && !selectedProfile && <p className="text-sm text-slate-600 sm:col-span-2">Choose a saved configuration. Add configurations in Agent settings using the gear in the header.</p>}
           {risk === 'low' && workflowKind !== 'documentation' && <label className="text-sm flex gap-2 sm:col-span-2"><input type="checkbox" checked={autoChecks} onChange={(e) => setAutoChecks(e.target.checked)} />Approve passing test/build checks automatically</label>}
           {settingsError && <p role="alert" className="text-sm text-red-600 sm:col-span-2">Could not load agent profiles: {settingsError}. Manual creation is available.</p>}
         </fieldset>

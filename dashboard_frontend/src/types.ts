@@ -147,3 +147,17 @@ export type { AgentProfile, AgentSettings } from '../../src/core/agent-profile';
 export interface HandoffContext { context: string; workspacePath: string; mode: 'dashboard' | 'ide'; canHandoff: boolean; reason?: string }
 export type CreateSpecOptions = import('../../src/core/schemas').WorkflowOptions & { description?: string; agentProfileId?: string };
 export const AGENT_LABELS = { codex: 'Codex', claude: 'Claude Code', opencode: 'OpenCode' };
+
+export interface AgentDetection {
+  available: boolean;
+  version?: string;
+  command?: string;
+  configPath?: string;
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+  credentialEnv?: string;
+  error?: string;
+  installations?: Array<{ command: string; label: string; version: string }>;
+  models?: Array<{ id: string; label: string; provider?: string }>;
+}

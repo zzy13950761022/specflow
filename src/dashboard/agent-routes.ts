@@ -37,7 +37,7 @@ export function registerAgentRoutes(server: FastifyInstance, app: AppCore) {
       checks.push({ name: 'Configuration', status: 'passed', message: 'Selected native configuration can be loaded.' });
       root = await fs.mkdtemp(join(tmpdir(), 'ai-pilot-agent-test-'));
       const workspace = join(root, 'workspace'); await fs.mkdir(workspace);
-      const result = await runAgentTurn({ profile: input.data.profile, cwd: workspace, runtime: join(root, 'runtime'), prompt: 'Connection test. Do not use tools or read files. Return only {"ok":true}.', schema: { type: 'object', additionalProperties: false, required: ['ok'], properties: { ok: { type: 'boolean' } } }, signal: AbortSignal.timeout(60_000), timeoutMs: 60_000 });
+      const result = await runAgentTurn({ profile: { ...input.data.profile, command: detected.command ?? input.data.profile.command }, cwd: workspace, runtime: join(root, 'runtime'), prompt: 'Connection test. Do not use tools or read files. Return only {"ok":true}.', schema: { type: 'object', additionalProperties: false, required: ['ok'], properties: { ok: { type: 'boolean' } } }, signal: AbortSignal.timeout(60_000), timeoutMs: 60_000 });
       const success = z.object({ ok: z.literal(true) }).safeParse(JSON.parse(result.text)).success;
       checks.push({ name: 'Model request', status: success ? 'passed' : 'failed', message: success ? 'Model responded through the selected Agent.' : 'Unexpected model response.' });
       return { ok: success, checks };

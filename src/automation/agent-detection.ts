@@ -1,15 +1,15 @@
 import { promises as fs } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { parse, stringify } from 'smol-toml';
 import type { AgentProfile } from '../core/agent-profile.js';
 import { AgentProfileSchema } from '../core/agent-profile.js';
 import { managedModelConfiguration } from './codex-config.js';
+import { discoverInstallations, type AgentDiscoveryOptions, type AgentInstallation } from './agent-discovery.js';
 
 export interface NativeMetadata { configPath?: string; provider?: string; model?: string; baseUrl?: string; credentialEnv?: string }
-const exec = promisify(execFile);
+export interface AgentModelChoice { id: string; label: string; provider?: string }
+export interface AgentDetection extends NativeMetadata { available: boolean; error?: string; version?: string; command?: string; installations?: AgentInstallation[]; models?: AgentModelChoice[] }
 const transportNames = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_MODEL'];
 function parseJsonc(source: string) {
   let output = '', quoted = false, escaped = false;
@@ -63,6 +63,11 @@ function safeEndpoint(value: unknown): string | undefined {
 export async function nativeConfiguration(profile: AgentProfile) {
   const source = await sourceFile(profile);
   const env = { ...process.env };
+  const models: AgentModelChoice[] = [];
+  const addModel = (id: unknown, provider: unknown, label?: unknown) => {
+    if (typeof id !== 'string' || !id.trim() || id.length > 200 || typeof provider !== 'string' || !provider || provider.length > 200) return;
+    if (!models.some(choice => choice.id === id && choice.provider === provider)) models.push({ id, label: typeof label === 'string' && label.trim() ? label.slice(0, 200) : id, provider });
+  };
   let config: Record<string, any> = {}, model = profile.model, provider = profile.provider, baseUrl = profile.baseUrl, credentialEnv = profile.credentialEnv;
   try {
     if (profile.agent === 'codex') {
@@ -85,6 +90,10 @@ export async function nativeConfiguration(profile: AgentProfile) {
       }
       if (model) config.model = model;
       config.model_provider = provider;
+      addModel(model, provider);
+      for (const configured of Object.values(native.profiles ?? {}) as Array<Record<string, any>>) {
+        addModel(configured?.model ?? native.model, configured?.model_provider ?? native.model_provider ?? 'openai');
+      }
     } else if (profile.agent === 'claude') {
       const native = parseJsonc(source.text);
       for (const name of transportNames) if (typeof native.env?.[name] === 'string') env[name] = native.env[name];
@@ -98,6 +107,13 @@ export async function nativeConfiguration(profile: AgentProfile) {
       }
       provider ??= baseUrl ? 'hyperspace' : 'anthropic';
       if (model) env.ANTHROPIC_MODEL = model;
+      addModel(model, provider);
+      for (const [name, value] of Object.entries(native.env ?? {})) {
+        if (/^ANTHROPIC_DEFAULT_[A-Z0-9_]+_MODEL$/.test(name) && typeof value === 'string') {
+          env[name] = value;
+          addModel(value, provider);
+        }
+      }
     } else {
       const native = parseJsonc(source.text);
       model ??= native.model;
@@ -120,21 +136,29 @@ export async function nativeConfiguration(profile: AgentProfile) {
       config = { ...(model ? { model } : {}), ...(custom ? v2
         ? { providers: { [provider!]: { ...sourceProvider, settings: options, models } } }
         : { provider: { [provider!]: { npm: sourceProvider.npm ?? '@ai-sdk/openai-compatible', options, models } } } : {}) };
+      addModel(model, provider, sourceProvider.models?.[modelId!]?.name);
+      for (const [name, configured] of Object.entries(native.providers ?? native.provider ?? {}) as Array<[string, Record<string, any>]>) {
+        for (const [id, details] of Object.entries(configured?.models ?? {}) as Array<[string, Record<string, any>]>) addModel(name + '/' + id, name, details?.name);
+      }
     }
   } catch (error) {
     if (error instanceof SyntaxError) throw new Error('Cannot parse native model configuration.');
     throw error;
   }
   const metadata: NativeMetadata = { configPath: profile.configPath, model, provider, baseUrl: safeEndpoint(baseUrl), credentialEnv };
-  return { config, toml: profile.agent === 'codex' ? stringify(config) : undefined, env, model, provider, public: metadata };
+  return { config, toml: profile.agent === 'codex' ? stringify(config) : undefined, env, model, provider, models, public: metadata };
 }
-export async function detectAgent(profile: AgentProfile) {
-  let version: string;
-  try { version = (await exec(profile.command ?? profile.agent, ['--version'], { timeout: 10_000, maxBuffer: 32 * 1024 })).stdout.trim().slice(0, 200); }
-  catch { return { available: false, error: 'Executable unavailable. Set its absolute path and check installation.' }; }
-  try { return { available: true, version, ...(await nativeConfiguration(profile)).public }; }
-  catch { return { available: true, version, error: 'Executable found, but native configuration could not be read. Check the file and provider settings.' }; }
+export async function detectAgent(profile: AgentProfile, options?: AgentDiscoveryOptions): Promise<AgentDetection> {
+  const command = profile.command ?? (profile.agent === 'codex' ? process.env.AI_PILOT_CODEX_BIN : undefined);
+  const installations = await discoverInstallations(profile.agent, command, options);
+  const selected = installations[0];
+  if (!selected) return { available: false, installations, error: 'Executable unavailable. Set its absolute path and check installation.' };
+  const result = { available: true, version: selected.version, command: selected.command, installations };
+  try { const native = await nativeConfiguration(profile); return { ...result, ...native.public, models: native.models }; }
+  catch { return { ...result, error: 'Executable found, but native configuration could not be read. Check the file and provider settings.' }; }
 }
-export async function pinProfile(profile: AgentProfile): Promise<AgentProfile> {
-  return AgentProfileSchema.parse({ ...profile, ...(await nativeConfiguration(profile)).public });
+export async function pinProfile(profile: AgentProfile, options?: AgentDiscoveryOptions): Promise<AgentProfile> {
+  const command = profile.command ?? (profile.agent === 'codex' ? process.env.AI_PILOT_CODEX_BIN : undefined);
+  const selected = (await discoverInstallations(profile.agent, command, options))[0];
+  return AgentProfileSchema.parse({ ...profile, command: selected?.command ?? command, ...(await nativeConfiguration(profile)).public });
 }

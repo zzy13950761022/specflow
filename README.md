@@ -297,12 +297,25 @@ npm start -- --dashboard
 
 Use `--no-runner` for a review-only Dashboard. `--runner` remains accepted
 for existing launch commands. In the header, open **Agent settings** next to
-**Add repo**, add a named Codex, Claude Code or OpenCode profile, and select a user
-or repository default. **Detect local config** reads the selected native model
-transport; **Test connection** sends one small model request in a temporary
-workspace. It does not create a ticket. Executable detection and model access are
-reported separately. If a CLI installation is broken, set **Command** to a working
-absolute executable path; the app does not install or repair global tools.
+**Add repo**, add an execution configuration, and choose Codex, Claude Code or
+OpenCode. Configuration names default to the Agent name; a custom name is optional
+under **Advanced settings**. User and repository defaults select a saved configuration.
+
+Local configuration is read automatically. **Model** defaults to **Use local
+current model**; searchable choices come from models declared in native settings
+(Codex profiles, Claude model aliases, and OpenCode providers). These choices do
+not guarantee service access. **Custom model…** remains available; OpenCode uses
+its provider/model-id format and updates the provider together with the model.
+Choosing a locally configured model clears previous connection overrides.
+
+When no program is explicitly configured, detection checks PATH and conventional
+local installations, including Codex bundled with VS Code on macOS. A broken
+installation does not prevent finding another working one. **Advanced settings**
+contains the installation selector, program/config paths, provider, endpoint and
+credential environment-variable name. An explicitly selected broken program is
+reported rather than silently replaced. The app does not install or repair global
+tools. **Refresh local config** rereads settings; **Test connection** sends one
+small model request in a temporary workspace without creating a ticket.
 
 Profiles can inherit the native configuration or override the model, provider,
 endpoint, configuration path and a credential environment-variable name. Set the
@@ -318,7 +331,7 @@ is checked against its [official schema](https://opencode.ai/config.json).
 
 **Create Spec** opens a modal containing repository, ticket, title, description,
 workflow, risk and execution settings. Choose **Run in Dashboard**, select a saved
-profile and click **Create & Start**. Creation persists the ticket before the
+execution configuration and click **Create & Start**. Creation persists the ticket before the
 runner starts; launch failures remain on the ticket with a Retry action. Manual
 creation stays available without any Agent configuration. The board searches
 ticket IDs/titles, filters state/stage/workflow and sorts results; URL query

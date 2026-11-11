@@ -236,7 +236,7 @@ async function mockDashboard(page: Page) {
   specs[0].updatedAt = '2026-11-01T00:00:00Z';
   specs[1].updatedAt = '2026-11-02T00:00:00Z';
   let settings = { revision: 3, profiles: [{ id: 'codex-local', name: 'Local Codex', agent: 'codex', version: 1, model: '', provider: '', baseUrl: '', credentialEnv: '', command: '', configPath: '' }], defaultProfileId: 'codex-local', repoDefaults: { 'ui-repo': 'codex-local' } };
-  const state = { existingProfile: false, noDefault: false, detectError: false, resumeBodies: [] as Record<string, unknown>[], createFails: false, saveFails: false, startFails: false, transfers: 0, resumes: 0, creations: [] as Record<string, unknown>[], saved: null as unknown, mode: 'dashboard' };
+  const state = { detections: [] as Record<string, unknown>[], existingProfile: false, noDefault: false, detectError: false, resumeBodies: [] as Record<string, unknown>[], createFails: false, saveFails: false, startFails: false, transfers: 0, resumes: 0, creations: [] as Record<string, unknown>[], saved: null as unknown, mode: 'dashboard' };
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -258,7 +258,7 @@ async function mockDashboard(page: Page) {
       }
       return reply(state.noDefault ? { ...settings, defaultProfileId: undefined, repoDefaults: {}, profiles: [...settings.profiles, { id: 'claude-explicit', name: 'Explicit Claude', agent: 'claude', version: 1 }] } : settings);
     }
-    if (path === '/api/agents/detect') return reply({ error: state.detectError ? 'Cannot read agent configuration' : undefined, available: true, version: '1.2.3', configPath: '/tmp/agent-config', model: 'detected-model', provider: 'hyperspace', credentialEnv: 'HYPERSPACE_API_KEY' });
+    if (path === '/api/agents/detect') { state.detections.push(body); return reply({ command: '/tmp/working-' + body.agent, installations: [{command: '/tmp/working-' + body.agent, label: 'VS Code extension', version: '1.2.3'}], models: [{id: 'detected-model', label: 'Current model', provider: 'hyperspace'}, {id: body.agent === 'opencode' ? 'other-provider/other-model' : 'other-model', label: 'Other model', provider: 'other-provider'}], error: state.detectError ? 'Cannot read agent configuration' : undefined, available: true, version: '1.2.3', configPath: '/tmp/agent-config', model: 'detected-model', provider: 'hyperspace', credentialEnv: 'HYPERSPACE_API_KEY' }); }
     if (path === '/api/agents/test') return reply({ ok: false, checks: [{ name: 'Credentials', status: 'failed', message: 'HYPERSPACE_API_KEY is not set' }] });
     if (path.endsWith('/handoff')) {
       if (request.method() === 'POST') { state.transfers++; state.mode = 'ide'; }
@@ -326,7 +326,7 @@ test('create dialog retains failed form, traps focus, and shows start failure on
   await dialog.getByLabel('Title', { exact: true }).fill('Create robust flow');
   await dialog.getByLabel('Description').fill('Keep the acceptance criteria after errors.');
   await dialog.getByLabel('Execution', { exact: true }).selectOption('dashboard');
-  await expect(dialog.getByLabel('Agent profile')).toHaveValue('codex-local');
+  await expect(dialog.getByLabel('Execution configuration')).toHaveValue('codex-local');
   await dialog.getByRole('button', { name: 'Create & Start' }).click();
   await expect(dialog.getByRole('alert')).toHaveText('Could not persist spec');
   await expect(dialog.getByRole('alert')).toBeVisible();
@@ -345,21 +345,22 @@ test('agent settings detects configuration and retains edits after revision conf
   await page.goto('/');
   await page.getByRole('button', { name: 'Agent settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Agent settings' });
-  await dialog.getByRole('button', { name: 'Add profile', exact: true }).click();
-  await dialog.getByLabel('Profile name').fill('Hyperspace Claude');
+  await dialog.getByRole('button', { name: 'Add configuration', exact: true }).click();
+  await dialog.getByText('Advanced settings', { exact: true }).click();
+  await dialog.getByLabel('Configuration name').fill('Hyperspace Claude');
   await dialog.getByLabel('Agent', { exact: true }).selectOption('claude');
-  await dialog.getByRole('button', { name: 'Detect local config' }).click();
-  await expect(dialog.getByLabel('Model', { exact: true })).toHaveValue('detected-model');
-  await expect(dialog.getByLabel('Credential environment variable')).toHaveValue('HYPERSPACE_API_KEY');
+  await expect(dialog.getByText('Current: detected-model', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Model', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Credential environment variable')).toHaveValue('');
   await dialog.getByRole('button', { name: 'Test connection' }).click();
   await expect(dialog.getByText(/Credentials: failed/)).toBeVisible();
-  await dialog.getByLabel('User default').selectOption({ label: 'Hyperspace Claude' });
-  await dialog.getByLabel(/Repository default/).selectOption({ label: 'Hyperspace Claude' });
+  await dialog.getByLabel('User default').selectOption({ label: 'Hyperspace Claude · Claude Code · Local current model' });
+  await dialog.getByLabel(/Repository default/).selectOption({ label: 'Hyperspace Claude · Claude Code · Local current model' });
   state.saveFails = true;
   await dialog.getByRole('button', { name: 'Save settings' }).click();
   await expect(dialog.getByRole('alert')).toContainText('Settings changed elsewhere');
   await expect(dialog.getByRole('alert')).toBeVisible();
-  await expect(dialog.getByLabel('Profile name')).toHaveValue('Hyperspace Claude');
+  await expect(dialog.getByLabel('Configuration name')).toHaveValue('Hyperspace Claude');
   expect(state.saved).toMatchObject({ revision: 3 });
   state.saveFails = false;
   await dialog.getByRole('button', { name: 'Save settings' }).click();
@@ -390,7 +391,7 @@ test('manual IDE ticket without defaults resumes with the explicitly selected pr
   state.noDefault = true;
   state.mode = 'ide';
   await page.goto('/repos/ui-repo/specs/UI-2');
-  await page.getByLabel('Agent profile').selectOption('claude-explicit');
+  await page.getByLabel('Execution configuration').selectOption('claude-explicit');
   await page.getByRole('button', { name: 'Select DEVELOP', exact: true }).click();
   await page.getByRole('button', { name: 'Resume in Dashboard', exact: true }).click();
   await expect.poll(() => state.resumeBodies).toEqual([{ profileId: 'claude-explicit' }]);
@@ -402,8 +403,8 @@ test('agent detection surfaces config read errors without applying partial confi
   await page.goto('/');
   await page.getByRole('button', { name: 'Agent settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Agent settings' });
-  await dialog.getByRole('button', { name: 'Detect local config' }).click();
   await expect(dialog.getByRole('alert')).toHaveText('Cannot read agent configuration');
+  await dialog.getByText('Advanced settings', { exact: true }).click();
   await expect(dialog.getByRole('alert')).toBeVisible();
   await expect(dialog.getByLabel('Model', { exact: true })).toHaveValue('');
   await expect(dialog.getByLabel('Config path')).toHaveValue('');
@@ -417,6 +418,7 @@ test('agent settings scroll body keeps every field above the fixed footer', asyn
   await page.getByRole('button', { name: 'Agent settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Agent settings' });
   await dialog.getByRole('button', { name: 'Test connection' }).click();
+  await dialog.getByText('Advanced settings', { exact: true }).click();
   const bounds = await dialog.evaluate((element) => {
     const form = element.querySelector('form')!;
     const body = form.firstElementChild as HTMLElement;
@@ -449,13 +451,75 @@ test('existing IDE ticket preserves its profile snapshot unless another profile 
   state.existingProfile = true;
   state.mode = 'ide';
   await page.goto('/repos/ui-repo/specs/UI-2');
-  await expect(page.getByLabel('Agent profile')).toHaveValue('');
-  await expect(page.getByRole('option', { name: 'Keep current profile · Original Codex v1', exact: true })).toHaveCount(1);
+  await expect(page.getByLabel('Execution configuration')).toHaveValue('');
+  await expect(page.getByRole('option', { name: 'Keep current configuration · Original Codex v1', exact: true })).toHaveCount(1);
   await page.getByRole('button', { name: 'Resume in Dashboard', exact: true }).click();
   await expect.poll(() => state.resumeBodies).toEqual([{}]);
   state.mode = 'ide';
   await page.reload();
-  await page.getByLabel('Agent profile').selectOption('codex-local');
+  await page.getByLabel('Execution configuration').selectOption('codex-local');
   await page.getByRole('button', { name: 'Resume in Dashboard', exact: true }).click();
   await expect.poll(() => state.resumeBodies).toEqual([{}, { profileId: 'codex-local' }]);
+});
+
+
+test('configuration setup detects automatically and hides optional names and provider identifiers', async ({ page }) => {
+  const state = await mockDashboard(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Agent settings', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Agent settings' });
+  await dialog.getByRole('button', { name: 'Add configuration', exact: true }).click();
+  await expect(dialog.getByLabel('Configuration name', { exact: true })).not.toBeVisible();
+  await expect(dialog.getByLabel('Provider', { exact: true })).not.toBeVisible();
+  await expect(dialog.getByText('Current: detected-model', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Model', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Installation', { exact: true })).toHaveValue('/tmp/working-codex');
+  await dialog.getByLabel('Agent', { exact: true }).selectOption('opencode');
+  await expect.poll(() => state.detections.some((body) => body.agent === 'opencode' && !body.command)).toBe(true);
+  await expect(dialog.getByLabel('Installation', { exact: true })).toHaveValue('/tmp/working-opencode');
+  await dialog.getByLabel('Search models').fill('Other');
+  await dialog.getByLabel('Model', { exact: true }).selectOption({ label: 'Other model · other-provider' });
+  await dialog.getByRole('button', { name: 'Save settings' }).click();
+  await expect(dialog.getByText('Settings saved.')).toBeVisible();
+  const added = (state.saved as any).profiles.at(-1);
+  expect(added).toMatchObject({ name: 'OpenCode', agent: 'opencode', model: 'other-provider/other-model', provider: 'other-provider', command: '/tmp/working-opencode' });
+  expect(added.baseUrl).toBeUndefined();
+  expect(added.credentialEnv).toBeUndefined();
+  await expect(dialog.getByText('Current: detected-model', { exact: true })).toBeVisible();
+  await dialog.locator('.dialog-body').evaluate((element) => { element.scrollTop = 0; });
+  await page.screenshot({ path: '/private/tmp/ai-pilot-settings-simple.png' });
+  await dialog.getByText('Advanced settings', { exact: true }).click();
+  await dialog.getByLabel('Model', { exact: true }).selectOption('custom');
+  await dialog.getByLabel('Custom model ID', { exact: true }).fill('new-provider/custom');
+  await expect(dialog.getByLabel('Provider', { exact: true })).toHaveValue('new-provider');
+  await dialog.getByLabel('Configuration name', { exact: true }).fill('My daily work');
+  await dialog.getByLabel('Agent', { exact: true }).selectOption('claude');
+  await expect(dialog.getByLabel('Configuration name', { exact: true })).toHaveValue('My daily work');
+  await expect(dialog.getByLabel('Model', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Provider', { exact: true })).toHaveValue('');
+});
+
+
+test('late native detection cannot overwrite a different Agent selection', async ({ page }) => {
+  await mockDashboard(page);
+  let release!: () => void;
+  let started = false;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/agents/detect', async (route) => {
+    const agent = route.request().postDataJSON().agent;
+    if (agent === 'codex') { started = true; await pending; }
+    await route.fulfill({ json: { available: true, command: '/tmp/' + agent, model: agent + '-current', models: [], installations: [{command: '/tmp/' + agent, label: agent, version: '1'}] } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Agent settings', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Agent settings' });
+  await expect.poll(() => started).toBe(true);
+  await dialog.getByLabel('Agent', { exact: true }).selectOption('claude');
+  await expect(dialog.getByText('Current: claude-current', { exact: true })).toBeVisible();
+  const oldResponse = page.waitForResponse((response) => response.url().endsWith('/api/agents/detect') && response.request().postDataJSON().agent === 'codex');
+  release();
+  await oldResponse;
+  await dialog.getByRole('button', { name: 'Save settings', exact: true }).click();
+  await expect(dialog.getByText('Current: claude-current', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Installation', { exact: true })).toHaveValue('/tmp/claude');
 });
