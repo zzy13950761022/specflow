@@ -59,6 +59,12 @@ export const GateSchema = z.object({
 });
 export type Gate = z.infer<typeof GateSchema>;
 
+export const ImplementationReviewSchema = z.object({
+  id: z.string(), status: z.enum(['pending_review', 'approved', 'rejected', 'needs_revision']),
+  developRevision: z.number().int(), taskAttempt: z.number().int(), codeFingerprint: z.string(),
+  reportPath: z.string(), submittedAt: z.string(), reviewedAt: z.string().optional(), comment: z.string().optional(),
+});
+
 /** DEVELOP sub-task. Phase 3 makes this real: ordered checklist, individually checkable. */
 export const SubtaskSchema = z.object({
   id: z.string(),
@@ -74,6 +80,8 @@ export const SubtaskSchema = z.object({
   status: z.enum(['pending', 'running', 'done']).default('pending'),
   claimId: z.string().optional(),
   attempt: z.number().int().min(0).default(0),
+  review: ImplementationReviewSchema.optional(),
+  reviewHistory: z.array(ImplementationReviewSchema).optional(),
   /** Existing files/utilities Claude should reuse when implementing this task. */
   leverage: z.array(z.string()).optional(),
 });
@@ -350,11 +358,13 @@ export const WorkflowOptionsSchema = z.object({
   workflowKind: z.enum(['standard', 'bugfix', 'documentation']).default('standard'),
   risk: z.enum(['low', 'normal', 'high']).default('normal'),
   autoChecks: z.boolean().default(false),
+  autoRun: z.boolean().default(false),
 });
 export type WorkflowOptions = z.input<typeof WorkflowOptionsSchema>;
 
 export const SpecFileSchema = z.object({
   schemaVersion: z.number(),
+  stateVersion: z.number().int().nonnegative().optional(),
   ticketId: z.string(),
   title: z.string(),
   specPath: z.string(),
@@ -364,6 +374,12 @@ export const SpecFileSchema = z.object({
   }).optional(),
   acceptanceCriteria: z.array(z.object({ id: z.string().min(1), given: z.string().min(1), when: z.string().min(1), then: z.string().min(1) })).default([]),
   workflow: WorkflowOptionsSchema.default({}),
+  automation: z.object({
+    enabled: z.boolean(), status: z.enum(['queued', 'running', 'waiting_review', 'failed', 'paused', 'completed']),
+    attempt: z.number().int().min(0).default(0), runId: z.string().optional(), ownerPid: z.number().int().optional(),
+    runnerPid: z.number().int().optional(), threadId: z.string().optional(), worktreePath: z.string().optional(),
+    error: z.string().optional(), startedAt: z.string().optional(), finishedAt: z.string().optional(),
+  }).optional(),
   execution: z.object({
     status: z.enum(['ready', 'running', 'waiting_review', 'failed', 'paused', 'completed']).default('ready'),
     retryCount: z.number().int().min(0).default(0), lastSuccessfulStep: z.string().optional(), error: z.string().optional(),

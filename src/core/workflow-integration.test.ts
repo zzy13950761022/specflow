@@ -27,6 +27,8 @@ async function enterTest(options: WorkflowOptions = {}) {
     if (stage.id === 'develop') {
       await app.logImplementation(repoId, 'INT-1', 'A', { summary: 'Implemented', filesModified: ['source.ts'], filesCreated: [], statistics: { linesAdded: 1, linesRemoved: 0 }, artifacts: {} });
       await app.setSubtaskCompleted(repoId, 'INT-1', 'A', true);
+      const reviewed = await app.submitImplementationReview(repoId, 'INT-1');
+      await app.reviewImplementation(repoId, 'INT-1', 'A', reviewed.stages[3].subtasks![0].review!.id, 'approved');
     }
     await app.advance(repoId, 'INT-1', stage.id);
   }
@@ -45,11 +47,11 @@ it('source drift after TEST blocks BUILD and requires revalidation', async () =>
   await enterTest(); await app.runStageCheck(repoId, 'INT-1', 'test');
   await app.recordAiOutput(repoId, 'INT-1', 'test', 'Results'); await app.approve(repoId, 'INT-1', 'test'); await app.advance(repoId, 'INT-1', 'test');
   await fs.writeFile(join(repo, 'source.ts'), 'changed after test');
-  await expect(app.runStageCheck(repoId, 'INT-1', 'build')).rejects.toThrow(/code changed/i);
-  await expect(app.getStageContext(repoId, 'INT-1', 'build')).rejects.toThrow(/code changed/i);
+  await expect(app.runStageCheck(repoId, 'INT-1', 'build')).rejects.toThrow(/source changed/i);
+  await expect(app.getStageContext(repoId, 'INT-1', 'build')).rejects.toThrow(/source changed/i);
   const status = await app.getExecutionStatus(repoId, 'INT-1');
   expect(status.actions[0].tool).toBe('reopen_stage');
-  expect(status.actions[0].stageId).toBe('test');
+  expect(status.actions[0].stageId).toBe('develop');
 });
 
 it('rework retains structured requirements history', async () => {
@@ -82,8 +84,8 @@ it('reject and revise cannot act on an outdated reviewed revision', async () => 
 });
 
 it('rework cannot detach a live check and allow overlapping commands', async () => {
-  await enterTest(); await app.recordAiOutput(repoId, 'INT-1', 'test', 'Tests planned');
   await fs.writeFile(join(repo, '.specflow/checks.json'), JSON.stringify({ test: { command: process.execPath, args: ['-e', 'setTimeout(()=>{},150)'] } }));
+  await enterTest(); await app.recordAiOutput(repoId, 'INT-1', 'test', 'Tests planned');
   const running = app.runStageCheck(repoId, 'INT-1', 'test');
   while (!(await app.getSpec(repoId, 'INT-1'))!.stages[4].activeCheck) await new Promise((resolve) => setTimeout(resolve, 1));
   await expect(app.reopenStage(repoId, 'INT-1', 'test', 'Change plan')).rejects.toThrow(/running.*check|check.*running/i);
@@ -103,8 +105,8 @@ it('completed workflows retain no next actions after later source changes', asyn
 });
 
 it('submissions cannot change the revision while a check is running', async () => {
-  await enterTest();
   await fs.writeFile(join(repo, '.specflow/checks.json'), JSON.stringify({ test: { command: process.execPath, args: ['-e', 'setTimeout(()=>{},150)'] } }));
+  await enterTest();
   const running = app.runStageCheck(repoId, 'INT-1', 'test');
   while (!(await app.getSpec(repoId, 'INT-1'))!.stages[4].activeCheck) await new Promise((resolve) => setTimeout(resolve, 1));
   await expect(app.recordAiOutput(repoId, 'INT-1', 'test', 'Changed plan')).rejects.toThrow(/check.*running|running.*check/i);
@@ -160,11 +162,11 @@ it('changing tasks after plan submission still invalidates its review and approv
 });
 
 it('excludes configured Maven outputs at approval but invalidates a changed output policy at advance', async () => {
-  await enterTest();
   const path = join(repo, '.specflow/checks.json');
   const config = JSON.parse(await fs.readFile(path, 'utf8'));
   config.generatedPaths = ['srv/target'];
   await fs.writeFile(path, JSON.stringify(config));
+  await enterTest();
   await app.runStageCheck(repoId, 'INT-1', 'test');
   await app.recordAiOutput(repoId, 'INT-1', 'test', 'Results');
   await fs.mkdir(join(repo, 'srv/target'), { recursive: true });

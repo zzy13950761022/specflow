@@ -11,6 +11,10 @@ async function respond(promise: Promise<unknown>) {
 export function registerWorkflowTools(server: McpServer, app: AppCore): void {
   const ticket = { repoId: z.string(), ticketId: z.string() };
   const task = { ...ticket, subtaskId: z.string() };
+  server.registerTool('submit_implementation_review', { description: 'Submit immutable implementation reports for completed subtasks. Human approval in Dashboard is required before TEST.', inputSchema: ticket },
+    async ({ repoId, ticketId }) => respond(app.submitImplementationReview(repoId, ticketId)));
+  server.registerTool('get_implementation_review', { description: 'Read an implementation report and its review status. This read never grants approval.', inputSchema: task },
+    async ({ repoId, ticketId, subtaskId }) => respond(app.getImplementationReview(repoId, ticketId, subtaskId)));
   server.registerTool('reopen_stage', {
     description: 'Reopen a reached stage with a reason. Invalidates affected downstream approvals, artifacts, task completion and verification evidence while preserving history.',
     inputSchema: { ...ticket, stageId: StageIdSchema, reason: z.string().trim().min(1) },

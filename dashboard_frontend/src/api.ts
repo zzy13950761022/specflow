@@ -9,12 +9,23 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 function workflowMutation(repoId: string, ticketId: string, path: string, body = {}) {
-  return fetch('/api/repos/' + encodeURIComponent(repoId) + '/specs/' + encodeURIComponent(ticketId) + path, {
+  return reviewFetch('/api/repos/' + encodeURIComponent(repoId) + '/specs/' + encodeURIComponent(ticketId) + path, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   }).then((response) => json<SpecFile>(response));
 }
 
+async function reviewFetch(url: string, options: RequestInit): Promise<Response> {
+  const session = await fetch('/api/review-session').then((response) => json<{ token: string }>(response));
+  return fetch(url, { ...options, headers: { ...options.headers, 'x-specflow-review-session': session.token } });
+}
+
 export const api = {
+  automationAvailable: () => fetch('/api/automation').then((response) => json<{ available: boolean }>(response)),
+  configureAutomation: (repoId: string, ticketId: string, enabled: boolean) => workflowMutation(repoId, ticketId, '/automation', { enabled }),
+  retryAutomation: (repoId: string, ticketId: string) => workflowMutation(repoId, ticketId, '/automation/retry'),
+  submitImplementationReview: (repoId: string, ticketId: string) => workflowMutation(repoId, ticketId, '/develop/submit-review'),
+  reviewImplementation: (repoId: string, ticketId: string, subtaskId: string, expectedReviewId: string, verdict: 'approved' | 'rejected' | 'needs_revision', comment?: string) => workflowMutation(repoId, ticketId, '/develop/review', { subtaskId, expectedReviewId, verdict, comment }),
+  implementationReview: (repoId: string, ticketId: string, subtaskId: string) => fetch('/api/repos/' + encodeURIComponent(repoId) + '/specs/' + encodeURIComponent(ticketId) + '/develop/review?subtaskId=' + encodeURIComponent(subtaskId)).then((response) => json<{ review: NonNullable<Subtask['review']>; content: string; sourceChanged: boolean }>(response)),
   reopen: (repoId: string, ticketId: string, stageId: StageId, reason: string) => workflowMutation(repoId, ticketId, '/reopen', { stageId, reason }),
   pause: (repoId: string, ticketId: string) => workflowMutation(repoId, ticketId, '/execution/pause'),
   resume: (repoId: string, ticketId: string) => workflowMutation(repoId, ticketId, '/execution/resume'),
@@ -52,28 +63,28 @@ export const api = {
     fetch(`/api/repos/${repoId}/specs/${ticketId}`).then((r) => json<SpecFile>(r)),
 
   createSpec: (repoId: string, ticketId: string, title: string, options: WorkflowOptions = {}) =>
-    fetch(`/api/repos/${repoId}/specs`, {
+    reviewFetch(`/api/repos/${repoId}/specs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ticketId, title, ...options }),
     }).then((r) => json<SpecFile>(r)),
 
   approve: (repoId: string, ticketId: string, stageId: StageId, expectedRevision: number) =>
-    fetch(`/api/repos/${repoId}/specs/${ticketId}/approve`, {
+    reviewFetch(`/api/repos/${repoId}/specs/${ticketId}/approve`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ stageId, expectedRevision }),
     }).then((r) => json<SpecFile>(r)),
 
   reject: (repoId: string, ticketId: string, stageId: StageId, comment: string, expectedRevision: number) =>
-    fetch(`/api/repos/${repoId}/specs/${ticketId}/reject`, {
+    reviewFetch(`/api/repos/${repoId}/specs/${ticketId}/reject`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ stageId, comment, expectedRevision }),
     }).then((r) => json<SpecFile>(r)),
 
   needsRevision: (repoId: string, ticketId: string, stageId: StageId, comment: string, expectedRevision: number) =>
-    fetch(`/api/repos/${repoId}/specs/${ticketId}/needs-revision`, {
+    reviewFetch(`/api/repos/${repoId}/specs/${ticketId}/needs-revision`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ stageId, comment, expectedRevision }),

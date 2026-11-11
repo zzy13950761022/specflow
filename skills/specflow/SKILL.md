@@ -13,6 +13,19 @@ Use AI Pilot's persisted workflow state to drive work through reviewed stages.
 Read state before deciding what to do; approval, implementation, and advancement
 are separate operations. The same instructions apply to Claude Code and Codex.
 
+## Managed Dashboard execution
+
+When the host explicitly supplies an **AI Pilot managed execution** contract,
+perform only its supplied artifact or claimed implementation task. Return the
+requested structured result and end the turn. The host calls AppCore for
+submission, claims, implementation logging, checks and stage advancement; MCP
+tools are intentionally absent in this mode. Do not run the interactive loop,
+poll approval, self-approve, or ask the user to type a continuation message.
+Read repository instructions and use the supplied approved context. Artifact
+turns are read-only; implementation turns write only in their assigned worktree.
+Human decisions stay in Dashboard, including completed-subtask review before
+TEST. A workflow decision does not authorize command escalation or deployment.
+
 ## Connect and identify the ticket
 
 1. Discover the AI Pilot MCP tools exposed in this session and inspect their input
@@ -55,6 +68,8 @@ and tool schema; action objects are hints, not complete tool arguments.
 | `get_stage_prompt` | Generate the current stage artifact using its prompt and approved context, then submit it. |
 | `get_approval_status` | Wait for review of the submitted revision using a bounded call. |
 | `claim_subtask` / `log_implementation` | Execute the approved development plan as described below. |
+| `submit_implementation_review` | Submit completed implementation reports for Dashboard review. |
+| `get_implementation_review` | Read the indicated subtask report; yield while human review is pending. |
 | `run_stage_check` | Run the configured platform check and inspect its evidence. |
 | `reopen_stage` | Reopen the returned stage with a concrete reason, then redo affected stages in order. The target can precede the current stage. |
 | `advance_stage` | Advance the current approved and complete stage, then read the new state. |
@@ -133,7 +148,12 @@ submit another DEVELOP artifact. For each task:
    then claim again. A new attempt needs a new log. Release affected running
    dependents before resetting upstream completion or changing the plan.
 
-When every task is complete and validly logged, follow `advance_stage`. Keep the
+When every task is complete and validly logged, submit implementation review and
+wait for each current subtask report to receive human approval in Dashboard.
+Completion does not authorize entering TEST. Review tokens bind plan revision,
+task attempt and source fingerprint; code changes require fresh review. Address
+implementation revision comments from task review history and redo affected
+tasks using their new attempt. Follow `advance_stage` only after valid approvals. Keep the
 approved plan artifact intact; implementation logs provide the completion record.
 Use `get_traceability` before integration review to find missing requirement/file/
 test links. Do not invent references to make the traceability report look complete.

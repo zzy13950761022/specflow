@@ -129,9 +129,11 @@ The develop stage has an explicit plan-before-code structure:
 
 1. **Phase A (gated)** — The assistant generates a task list and implementation plan, submits
    via `record_ai_output`. You review and approve in the dashboard.
-2. **Phase B (no extra gate)** — The assistant implements each subtask with its coding tools,
+2. **Phase B (implementation and result review)** — The assistant implements each subtask with its coding tools,
    then calls `log_implementation` (mandatory) to record what was built before marking
-   the subtask done.
+   the subtask done. Each completed subtask then requires human approval of its
+   implementation report before entering TEST. Reports bind the plan revision,
+   task attempt and source fingerprint; changed code invalidates old approvals.
 
 Task drafts before the first DEVELOP artifact do not increment its revision or
 mark it outdated. Changing tasks after an artifact exists invalidates that plan
@@ -239,8 +241,9 @@ Keep the existing `test` and `build` entries. Paths name a file or a directory
 and its contents; globs, absolute paths and `..` are rejected. No additional
 outputs are inferred from Maven or `.gitignore`. Include only generated outputs;
 keep handwritten sources, tests, build configuration and reviewed published
-contracts in the fingerprint. The exclusion policy is part of the fingerprint:
-changing it invalidates prior evidence. This fingerprint update also requires
+contracts in the fingerprint. The complete test/build command configuration and
+exclusion policy are part of the fingerprint: changing either invalidates prior
+implementation approvals and check evidence. This fingerprint update also requires
 fresh checks for earlier evidence; failed `codeChanged` evidence is never repaired
 by changing its flag. Restart the server and rerun the platform check.
 
@@ -264,7 +267,8 @@ of what an external agent can modify.
 Pause blocks new execution but permits reads and human review. Resume recovers
 interrupted checks explicitly without automatically rerunning commands. Completed
 and paused workflows have no next actions. The platform provides scheduling APIs
-for external agents; it does not launch agents, push or deploy automatically.
+for external agents and an optional local Codex runner; pushing and deployment
+remain separate explicitly authorized operations.
 
 Schema v3 retains revision, workflow, execution and rework history. Completed v2
 tickets with unchanged artifacts and a full historical approval trail retain
@@ -281,6 +285,70 @@ For completed tickets already reset by the earlier migration, preview repair wit
 to write it after checking the preview. The script requires an unchanged completed
 legacy approval trail, rejects rework/new output/running claims, locks each ticket
 and saves original JSON under `.specflow/backups/` before atomic replacement.
+
+## Dashboard-driven local Codex execution
+
+Start the optional runner alongside Dashboard:
+
+```bash
+AI_PILOT_CODEX_BIN=/absolute/path/to/codex node dist/index.js --dashboard --runner
+```
+
+Use **Run automatically with Codex** when creating a ticket, or **Enable automatic
+Codex execution** in an existing ticket. Creation and Dashboard Approve/Revise/Reject
+then drive the next bounded turn. The agent ends each artifact turn and holds no
+approval-polling call. The dashboard is the review surface throughout.
+
+The ticket JSON is the durable execution queue. Events wake reconciliation; startup
+reads saved ready tickets, and duplicate events cannot launch concurrent turns for
+the same ticket. Interrupted or failed runs stop for inspection and explicit retry. State-version
+comparisons fence reconciliation writes across independent controllers.
+A live previous runner prevents retry. Different tickets can run concurrently, each
+in its own Git worktree at `.specflow/worktrees/TICKET`, on `specflow/TICKET`.
+The registered checkout must have committed source changes before a new worktree
+is created. Existing worktrees are reused without resetting files or switching the
+registered checkout. Keep generated worktrees out of version control.
+
+Canonical artifacts and approval state remain in the registered repo; source
+fingerprints, implementation snapshots and TEST/BUILD execute in the ticket worktree.
+A convenience check configuration is copied when creating the worktree, but the
+registered repository remains the command authority. The host reads check argv
+and fingerprint policy from that canonical configuration; model edits to the
+worktree copy cannot authorize different host commands. Install
+required project dependencies in that workspace or configure an explicit check
+wrapper that prepares them; the runner does not infer setup commands.
+
+The local adapter supports macOS/Linux and talks to Codex App Server over JSON-RPC stdio; its protocol subset
+was checked against Codex CLI 0.164 generated bindings. Set AI_PILOT_CODEX_BIN if
+the PATH executable is unavailable. Each ticket has a persisted native thread ID
+and isolated Codex configuration under the AI Pilot home directory. The service
+inherits the selected model and provider transport settings from the user
+`config.toml` (including the selected profile), so local/custom API endpoints
+are preserved. Only the selected provider is copied; MCP servers, hooks, project
+trust and user command approval settings are excluded. Thread creation and resume
+explicitly apply that model/provider.
+The service
+loads the maintained Specflow skill explicitly using the native skill input.
+It does not attach to or promise visibility in the Codex VS Code plugin.
+
+Artifact turns use a read-only sandbox. Implementation turns have workspace-write
+access to their worktree with network access disabled. Managed threads inherit no
+user-level MCP servers; repository Codex configurations declaring MCP servers or
+hooks are refused. Structured model output is validated and submitted by AppCore.
+The service owns claims, completion, platform checks and advancement. It never
+accepts an agent message as approval, and rejects interactive command escalation.
+Workflow approval does not authorize publishing or deployment.
+
+Dashboard decisions require a browser review capability and reject cross-origin
+writes. The capability is kept in service/browser memory, not in workflow files
+or agent prompts. This protects the managed runner boundary and browser requests;
+it is not independent human identity attestation against unrestricted programs
+running as the same OS user.
+
+Pause prevents new work and cancels a managed Codex turn. The owned Codex process group is terminated and checked before retry. Platform checks already
+running may finish; their evidence is still recorded. An interrupted model run
+can leave partial work in its worktree. Inspect it before using **Retry Codex
+execution**; retry preserves work and the recorded thread, never resets it.
 
 ## Shared Claude/Codex Specflow skill
 
@@ -319,6 +387,7 @@ them as simulated skill applications without operating on live tickets.
 | `get_stage_prompt` | Render the prompt for a stage with upstream context injected. |
 | `record_ai_output` | Submit AI output for a stage, flip gate to `pending_review`. |
 | `get_approval_status` | Bounded wait: default 30s, maximum 60s, 0 for a snapshot; returns structured actions. |
+| `submit_implementation_review` / `get_implementation_review` | Submit and read completed-subtask reports; human review is required before TEST. |
 | `advance_stage` | Move to next stage (refused unless gate is `approved`). |
 | `request_revision` | Third verdict: minor revision needed (gate → `needs_revision`). |
 | `set_develop_subtasks` | Set the develop task list (with prompt/leverage/requirementRef). |

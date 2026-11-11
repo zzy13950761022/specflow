@@ -437,6 +437,7 @@ describe('Phase 5 — AUTO_STAGES is the single capability source', () => {
       };
       // Valid execution evidence and plan completion accompany approval.
       spec = sm.approve(spec, stageId);
+      if (stageId === 'develop') for (const task of spec.stages[3].subtasks ?? []) task.review = { id: 'fixture', status: 'approved', developRevision: spec.stages[3].revision, taskAttempt: task.attempt, codeFingerprint: 'fixture', reportPath: 'fixture.md', submittedAt: 'now' };
       if (stageId !== 'ops') {
         expect(() => sm.advance(spec, stageId)).not.toThrow();
       }

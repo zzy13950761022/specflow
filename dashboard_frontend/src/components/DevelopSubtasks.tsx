@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { ImplementationReview } from './ImplementationReview';
 import type { SpecFile } from '../types';
 
 export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFile }) {
@@ -76,7 +77,7 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
               <input
                 type="checkbox"
                 checked={task.completed}
-                disabled={toggling === task.id || develop.gate.status !== 'approved' || spec.execution.status === 'paused'}
+                disabled={toggling === task.id || develop.gate.status !== 'approved' || spec.execution.status === 'paused' || !!spec.automation?.enabled || !!task.review}
                 onChange={() => handleToggle(task.id)}
                 className="mt-0.5 shrink-0 accent-joule-purple"
               />
@@ -99,6 +100,10 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
           />
         </div>
       )}
+      {subtasks.length > 0 && subtasks.every((task) => task.completed) && spec.currentStageId === 'develop' && spec.execution.status !== 'paused' && (
+        <button disabled={spec.automation?.status === 'running'} className="rounded-lg bg-blue-100 px-3 py-2 text-sm disabled:opacity-50" onClick={async () => { try { await api.submitImplementationReview(repoId, spec.ticketId); } catch (error) { setError(String((error as Error).message)); } }}>Submit implementation for review</button>
+      )}
+      {subtasks.filter((task) => task.review).map((task) => <ImplementationReview key={task.review!.id} repoId={repoId} ticketId={spec.ticketId} task={task} onDone={() => {}} />)}
 
       <div className="flex gap-1.5 mt-0.5">
         <input
@@ -112,7 +117,7 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
         />
         <button
           onClick={handleAdd}
-          disabled={adding || !newDesc.trim()}
+          disabled={adding || !newDesc.trim() || !!spec.automation?.enabled || spec.execution.status === 'paused'}
           className="rounded-lg bg-white/10 hover:bg-white/15 text-[11px] px-2 py-1 disabled:opacity-50"
         >
           +

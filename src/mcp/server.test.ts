@@ -52,6 +52,7 @@ describe('MCP server exposes the tool set', () => {
         'reopen_stage', 'run_stage_check', 'get_stage_context', 'get_traceability',
         'get_execution_status', 'get_next_actions', 'pause_execution', 'resume_execution',
         'claim_subtask', 'release_subtask', 'set_subtask_completed',
+        'submit_implementation_review', 'get_implementation_review',
         'create_spec',
         'get_approval_status',
         'get_implementation_logs',

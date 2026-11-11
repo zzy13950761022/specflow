@@ -177,3 +177,50 @@ test('inline annotations stay revision-bound through revise, reject and approve'
     await client.close();
   }
 });
+
+
+test('completed implementation is revised and approved in Dashboard before TEST', async ({ page }) => {
+  const added = await page.request.post('/api/repos', { data: { path: repo } });
+  const repoId = (await added.json()).id;
+  const ticketId = 'E2E-IMPL';
+  const url = '/api/repos/' + repoId + '/specs/' + ticketId;
+  const client = await mcpClient();
+  async function tool(name: string, arguments_: Record<string, unknown>) {
+    const result = await client.callTool({ name, arguments: { repoId, ticketId, ...arguments_ } });
+    expect(result.isError).not.toBe(true);
+  }
+  async function log(summary: string) {
+    await tool('log_implementation', { subtaskId: 'A', summary, filesModified: ['source.ts'], filesCreated: [], statistics: { linesAdded: 1, linesRemoved: 0 }, artifacts: {} });
+    await tool('set_subtask_completed', { subtaskId: 'A', completed: true });
+    await tool('submit_implementation_review', {});
+  }
+  try {
+    await tool('create_spec', { title: 'Implementation review', workflowKind: 'bugfix' });
+    await tool('record_ai_output', { stageId: 'spec', content: 'Acceptance criteria' });
+    await page.goto('/repos/' + repoId + '/specs/' + ticketId);
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(async () => (await (await page.request.get(url)).json()).stages[0].gate.status).toBe('approved');
+    await tool('advance_stage', { stageId: 'spec' });
+    await tool('set_develop_subtasks', { subtasks: [{ id: 'A', description: 'Implement validation' }] });
+    await tool('record_ai_output', { stageId: 'develop', content: 'Implement validation plan' });
+    await page.getByRole('button', { name: 'Select DEVELOP', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(async () => (await (await page.request.get(url)).json()).stages[3].gate.status).toBe('approved');
+    await fs.writeFile(join(repo, 'source.ts'), 'export const validation = false;');
+    await log('Initial validation implementation');
+    await expect(page.getByRole('button', { name: 'Advance stage', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Read implementation report', exact: true }).click();
+    await expect(page.getByText('export const validation = false;', { exact: true })).toBeVisible();
+    await page.getByLabel('Implementation review comment for Implement validation').fill('Enable validation');
+    await page.getByRole('button', { name: 'Revise implementation', exact: true }).click();
+    await expect.poll(async () => (await (await page.request.get(url)).json()).stages[3].subtasks[0].completed).toBe(false);
+    await fs.writeFile(join(repo, 'source.ts'), 'export const validation = true;');
+    await log('Enabled validation');
+    await page.getByRole('button', { name: 'Read implementation report', exact: true }).click();
+    await expect(page.getByText('export const validation = true;', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Approve implementation', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Advance stage', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Advance stage', exact: true }).click();
+    await expect.poll(async () => (await (await page.request.get(url)).json()).currentStageId).toBe('test');
+  } finally { await client.close(); }
+});

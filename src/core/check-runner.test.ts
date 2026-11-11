@@ -21,6 +21,17 @@ it('captures actual command success and output without stdout pollution', async 
   expect(result.codeFingerprint).toBe(await fingerprint(repo));
   expect(await fs.readFile(join(repo, result.outputPath), 'utf8')).toContain('built');
 });
+it('managed checks use canonical command authority instead of agent-writable configuration', async () => {
+  await configure('require("fs").writeFileSync("escaped-host-command", "bad")');
+  const canonical = await fs.mkdtemp(join(tmpdir(), 'canonical-checks-'));
+  try {
+    await fs.mkdir(join(canonical, '.specflow'));
+    await fs.writeFile(join(canonical, '.specflow', 'checks.json'), JSON.stringify({ build: { command: process.execPath, args: ['-e', 'console.log("canonical")'] } }));
+    const evidence = await runCheck(repo, 'CHECK-1', 'build', 'trusted-run', canonical);
+    expect(evidence.args).toEqual(['-e', 'console.log("canonical")']);
+    await expect(fs.stat(join(repo, 'escaped-host-command'))).rejects.toThrow();
+  } finally { await fs.rm(canonical, { recursive: true, force: true }); }
+});
 it('captures a failing exit code', async () => {
   await configure('process.exit(2)');
   expect((await runCheck(repo, 'CHECK-1', 'build')).exitCode).toBe(2);

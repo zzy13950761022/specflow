@@ -4,7 +4,7 @@ import { AppCore } from '../core/app-core.js';
 import { StageIdSchema } from '../core/schemas.js';
 
 type TicketParams = { repoId: string; ticketId: string };
-export function registerWorkflowRoutes(server: FastifyInstance, app: AppCore): void {
+export function registerWorkflowRoutes(server: FastifyInstance, app: AppCore, runnerEnabled = false): void {
   const prefix = '/api/repos/:repoId/specs/:ticketId';
   function post<T extends z.ZodTypeAny>(suffix: string, schema: T, run: (params: TicketParams, input: z.infer<T>) => Promise<unknown>) {
     server.post<{ Params: TicketParams; Body: unknown }>(prefix + suffix, async (req, reply) => {
@@ -25,6 +25,24 @@ export function registerWorkflowRoutes(server: FastifyInstance, app: AppCore): v
   post('/develop/release', z.object({ subtaskId: z.string(), claimId: z.string() }), (p, body) => app.releaseSubtask(p.repoId, p.ticketId, body.subtaskId, body.claimId));
   post('/develop/completed', z.object({ subtaskId: z.string(), completed: z.boolean(), claimId: z.string().optional() }),
     (p, body) => app.setSubtaskCompleted(p.repoId, p.ticketId, body.subtaskId, body.completed, body.claimId));
+  post('/develop/submit-review', z.object({}), (p) => app.submitImplementationReview(p.repoId, p.ticketId));
+  post('/develop/review', z.object({ subtaskId: z.string(), expectedReviewId: z.string(), verdict: z.enum(['approved', 'rejected', 'needs_revision']), comment: z.string().optional() }),
+    (p, body) => app.reviewImplementation(p.repoId, p.ticketId, body.subtaskId, body.expectedReviewId, body.verdict, body.comment));
+  server.get<{ Params: TicketParams; Querystring: { subtaskId: string } }>(prefix + '/develop/review', async (req, reply) => {
+    try { return await app.getImplementationReview(req.params.repoId, req.params.ticketId, req.query.subtaskId); }
+    catch (error) { return reply.code(400).send({ error: String((error as Error).message) }); }
+  });
+  post('/automation', z.object({ enabled: z.boolean() }), (p, body) => {
+    if (body.enabled && !runnerEnabled) throw new Error('Start Dashboard with --runner before enabling automatic execution.');
+    return app.configureAutomation(p.repoId, p.ticketId, body.enabled);
+  });
+  post('/automation/retry', z.object({}), async (p) => {
+    if (!runnerEnabled) throw new Error('Automatic execution is unavailable.');
+    const spec = await app.getSpec(p.repoId, p.ticketId);
+    if (spec?.automation?.status !== 'failed') throw new Error('Only failed automation runs can be retried.');
+    await app.resumeExecution(p.repoId, p.ticketId);
+    return app.configureAutomation(p.repoId, p.ticketId, true);
+  });
   for (const suffix of ['/execution', '/traceability'] as const) {
     server.get<{ Params: TicketParams }>(prefix + suffix, async (req, reply) => {
       try { return suffix === '/execution' ? await app.getExecutionStatus(req.params.repoId, req.params.ticketId) : await app.getTraceability(req.params.repoId, req.params.ticketId); }

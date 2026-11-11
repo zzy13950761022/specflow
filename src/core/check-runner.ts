@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'crypto';
 import { spawn } from 'child_process';
 import { z } from 'zod';
 import type { CheckEvidence } from './schemas.js';
+import { processGroupAlive } from './processes.js';
 
 const CommandSchema = z.object({
   command: z.string().min(1), args: z.array(z.string()).default([]),
@@ -42,16 +43,18 @@ async function writeCheckOwner(lock: string, owner: { pid: number; runId: string
   } finally { await fs.rm(temporary, { force: true }); }
 }
 
-export async function fingerprint(repoPath: string): Promise<string> {
-  const rawConfig = await fs.readFile(join(repoPath, '.specflow', 'checks.json'), 'utf8').catch((error: NodeJS.ErrnoException) => {
+export async function fingerprint(repoPath: string, configurationRepo = repoPath): Promise<string> {
+  const rawConfig = await fs.readFile(join(configurationRepo, '.specflow', 'checks.json'), 'utf8').catch((error: NodeJS.ErrnoException) => {
     if (error.code !== 'ENOENT') throw error;
     return '{}';
   });
-  const generatedPaths = [...new Set(ConfigSchema.parse(JSON.parse(rawConfig)).generatedPaths)].sort();
+  const config = ConfigSchema.parse(JSON.parse(rawConfig));
+  const generatedPaths = [...new Set(config.generatedPaths)].sort();
   const hash = createHash('sha256');
   // Bind evidence to the exclusion policy, including checks at approval/advance.
   // Version this change so earlier evidence cannot use a different file scope.
-  hash.update('fingerprint-v2\0');
+  hash.update('fingerprint-v3\0');
+  hash.update(JSON.stringify({ test: config.test, build: config.build }));
   hash.update(JSON.stringify(generatedPaths));
   hash.update('\0');
   async function walk(dir: string) {
@@ -83,7 +86,7 @@ async function coveragePath(repo: string, report: string): Promise<string> {
   return path;
 }
 
-export async function runCheck(repo: string, ticketId: string, stageId: 'test' | 'build', runId = randomUUID()): Promise<CheckEvidence> {
+export async function runCheck(repo: string, ticketId: string, stageId: 'test' | 'build', runId = randomUUID(), configurationRepo = repo): Promise<CheckEvidence> {
   const root = await fs.realpath(repo);
   const lock = join(root, '.specflow', 'repository-check.lock');
   await fs.mkdir(join(root, '.specflow'), { recursive: true });
@@ -93,7 +96,7 @@ export async function runCheck(repo: string, ticketId: string, stageId: 'test' |
   }
   try {
     await writeCheckOwner(lock, { pid: process.pid, runId });
-    return await executeCheck(root, ticketId, stageId, runId, lock);
+    return await executeCheck(root, ticketId, stageId, runId, lock, configurationRepo);
   } finally { await fs.rm(lock, { recursive: true, force: true }); }
 }
 
@@ -116,6 +119,7 @@ export async function recoverRepositoryCheck(repo: string): Promise<void> {
 async function lockMayBeRecovered(lock: string): Promise<boolean> {
   try {
     const owner = z.object({ pid: z.number().int().positive(), childPid: z.number().int().positive().optional() }).parse(JSON.parse(await fs.readFile(join(lock, 'owner.json'), 'utf8')));
+    if (processGroupAlive(owner.childPid)) return false;
     for (const pid of [owner.pid, owner.childPid].filter((pid): pid is number => pid !== undefined)) {
       try { process.kill(pid, 0); return false; } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return false; }
     }
@@ -127,13 +131,13 @@ async function lockMayBeRecovered(lock: string): Promise<boolean> {
   }
 }
 
-async function executeCheck(repo: string, ticketId: string, stageId: 'test' | 'build', runId: string, lock: string): Promise<CheckEvidence> {
-  const config = ConfigSchema.parse(JSON.parse(await fs.readFile(join(repo, '.specflow', 'checks.json'), 'utf8')));
+async function executeCheck(repo: string, ticketId: string, stageId: 'test' | 'build', runId: string, lock: string, configurationRepo: string): Promise<CheckEvidence> {
+  const config = ConfigSchema.parse(JSON.parse(await fs.readFile(join(configurationRepo, '.specflow', 'checks.json'), 'utf8')));
   const command = config[stageId];
   if (!command) throw new Error('Configure ' + stageId + ' in .specflow/checks.json before running checks.');
   const report = stageId === 'test' && command.coverageReport ? await coveragePath(repo, command.coverageReport) : undefined;
   if (report) await fs.rm(report, { force: true });
-  const before = await fingerprint(repo);
+  const before = await fingerprint(repo, configurationRepo);
   const startedAt = new Date().toISOString();
   let output = ''; let bytes = 0; let outputTruncated = false; let timedOut = false;
   const exitCode = await new Promise<number | null>((resolveRun) => {
@@ -164,7 +168,7 @@ async function executeCheck(repo: string, ticketId: string, stageId: 'test' | 'b
       if (lines.covered <= lines.total) coverage = Math.min(lines.pct / 100, lines.covered / lines.total);
     } catch { /* Missing/invalid report remains insufficient evidence. */ }
   }
-  const codeChanged = before !== await fingerprint(repo);
+  const codeChanged = before !== await fingerprint(repo, configurationRepo);
   const outputPath = join('.specflow', 'evidence', ticketId, runId + '.log');
   await fs.mkdir(join(repo, '.specflow', 'evidence', ticketId), { recursive: true });
   await fs.writeFile(join(repo, outputPath), output, 'utf8');

@@ -12,6 +12,11 @@ import { randomUUID } from 'crypto';
 import { buildStageContext, traceability } from './stage-context.js';
 import { canAutoApprove } from './workflow-policy.js';
 import { nextActions, synchronizeExecution } from './execution.js';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { resetTaskAndDependents } from './task-scheduler.js';
+import { implementationReport } from './implementation-report.js';
+import { processGroupAlive } from './processes.js';
 import type { SubtaskInput } from './schemas.js';
 
 /**
@@ -50,6 +55,14 @@ export class AppCore {
     if (!entry) throw new Error(`Unknown repo: ${repoId}`);
     return entry.path;
   }
+
+  async executionPath(repoId: string, ticketId: string): Promise<string> {
+    const path = await this.repoPath(repoId);
+    const spec = await this.requireSpec(path, ticketId);
+    return spec.automation?.worktreePath ?? path;
+  }
+
+  private sourcePath(spec: SpecFile, path: string): string { return spec.automation?.worktreePath ?? path; }
 
   /* ---- specs ---- */
 
@@ -133,11 +146,13 @@ export class AppCore {
     stageId: StageId,
     content: string,
     artifactInput?: ArtifactInput,
-    acceptanceCriteria?: SpecFile['acceptanceCriteria']
+    acceptanceCriteria?: SpecFile['acceptanceCriteria'],
+    expectedRunId?: string
   ): Promise<SpecFile> {
     const path = await this.repoPath(repoId);
     return this.mutate(repoId, ticketId, async (spec) => {
       // Validate before writing files, so rejected submissions leave the reviewed artifact intact.
+      this.assertAutomationRun(spec, expectedRunId);
       this.stageMachine.recordAiOutput(spec, stageId, { kind: 'markdown', path: '' });
       if (!content.trim()) throw new Error('Artifact content must be non-empty.');
       await this.validateUpstreamChecks(spec, path, stageId);
@@ -176,10 +191,13 @@ export class AppCore {
   }
 
   /** Throws GateNotApprovedError if the current gate isn't approved. */
-  async advance(repoId: string, ticketId: string, stageId: StageId): Promise<SpecFile> {
+  async advance(repoId: string, ticketId: string, stageId: StageId, expectedRunId?: string): Promise<SpecFile> {
     return this.mutate(repoId, ticketId, async (spec, path) => {
+      this.assertAutomationRun(spec, expectedRunId);
       await this.validateCheckEvidence(spec, path, stageId);
       if (stageId === 'develop') {
+        const source = await fingerprint(this.sourcePath(spec, path), path);
+        if (spec.stages[3].subtasks?.some((task) => task.review?.status === 'approved' && task.review.codeFingerprint !== source)) throw new Error('Implementation source changed after review. Submit a fresh implementation review.');
         const logs = await this.implLogs.list(path, ticketId);
         for (const task of spec.stages[3].subtasks ?? []) if (task.completed && !logs.some((log) => log.subtaskId === task.id && log.developRevision === spec.stages[3].revision && log.taskAttempt === task.attempt)) {
           throw new Error('Current implementation log is missing for task ' + task.id + '. Reopen and revalidate implementation.');
@@ -191,13 +209,17 @@ export class AppCore {
 
   private async validateCheckEvidence(spec: SpecFile, path: string, stageId: StageId): Promise<void> {
     await this.validateUpstreamChecks(spec, path, stageId);
-    if (stageId === 'test' || stageId === 'build') assertEvidence(spec.stages.find((stage) => stage.id === stageId)?.evidence, stageId, await fingerprint(path));
+    if (stageId === 'test' || stageId === 'build') assertEvidence(spec.stages.find((stage) => stage.id === stageId)?.evidence, stageId, await fingerprint(this.sourcePath(spec, path), path));
   }
 
   private async validateUpstreamChecks(spec: SpecFile, path: string, stageId: StageId): Promise<void> {
+    if (STAGE_IDS.indexOf(stageId) >= 4 && spec.stages[3].subtasks?.length && !spec.legacyCompletion) {
+      const source = await fingerprint(this.sourcePath(spec, path), path);
+      if (spec.stages[3].subtasks.some((task) => !task.completed || task.review?.status !== 'approved' || task.review.developRevision !== spec.stages[3].revision || task.review.taskAttempt !== task.attempt || task.review.codeFingerprint !== source)) throw new Error('Implementation review is missing or source changed; reopen DEVELOP and review the current implementation.');
+    }
     const checks = spec.stages.slice(0, STAGE_IDS.indexOf(stageId)).filter((stage) => !stage.skipped && (stage.id === 'test' || stage.id === 'build'));
     if (!checks.length) return;
-    const current = await fingerprint(path);
+    const current = await fingerprint(this.sourcePath(spec, path), path);
     for (const stage of checks) if (stage.id === 'test' || stage.id === 'build') assertEvidence(stage.evidence, stage.id, current);
   }
 
@@ -211,9 +233,10 @@ export class AppCore {
     return spec;
   }
 
-  async runStageCheck(repoId: string, ticketId: string, stageId: 'test' | 'build'): Promise<SpecFile> {
+  async runStageCheck(repoId: string, ticketId: string, stageId: 'test' | 'build', expectedRunId?: string): Promise<SpecFile> {
     const runId = randomUUID();
     await this.mutate(repoId, ticketId, async (spec, path) => {
+      this.assertAutomationRun(spec, expectedRunId);
       this.stageMachine.assertCurrent(spec, stageId);
       await this.validateUpstreamChecks(spec, path, stageId);
       const stage = spec.stages.find((stage) => stage.id === stageId)!;
@@ -226,7 +249,7 @@ export class AppCore {
       return spec;
     });
     try {
-      const evidence = await runCheck(await this.repoPath(repoId), ticketId, stageId, runId);
+      const evidence = await runCheck(await this.executionPath(repoId, ticketId), ticketId, stageId, runId, await this.repoPath(repoId));
       return await this.mutate(repoId, ticketId, async (spec, path) => {
         const stage = spec.stages.find((stage) => stage.id === stageId)!;
         if (stage.activeCheck?.runId !== runId) throw new Error('Check superseded by rework; discard this result.');
@@ -248,30 +271,82 @@ export class AppCore {
 
   /* ---- develop subtasks (Phase 3) ---- */
 
-  async reopenStage(repoId: string, ticketId: string, stageId: StageId, reason: string): Promise<SpecFile> {
-    return this.mutate(repoId, ticketId, async (spec) => this.stageMachine.reopen(spec, stageId, reason));
+  async submitImplementationReview(repoId: string, ticketId: string): Promise<SpecFile> {
+    return this.mutate(repoId, ticketId, async (spec, path) => {
+      this.stageMachine.assertImplementation(spec);
+      const stage = spec.stages[3];
+      if (!stage.subtasks?.length || stage.subtasks.some((task) => !task.completed)) throw new Error('Complete all implementation subtasks before review submission.');
+      const source = await fingerprint(this.sourcePath(spec, path), path);
+      const logs = await this.implLogs.list(path, ticketId);
+      for (const task of stage.subtasks) {
+        if (task.review?.codeFingerprint === source && task.review.developRevision === stage.revision && task.review.taskAttempt === task.attempt) continue;
+        const current = logs.filter((log) => log.subtaskId === task.id && log.developRevision === stage.revision && log.taskAttempt === task.attempt);
+        if (!current.length) throw new Error('Current implementation log is missing for task ' + task.id);
+        const id = randomUUID();
+        const reportPath = join('.specflow', 'implementation-reviews', ticketId, id + '.md');
+        const content = await implementationReport(this.sourcePath(spec, path), task, source, current);
+        await fs.mkdir(join(path, '.specflow', 'implementation-reviews', ticketId), { recursive: true });
+        await fs.writeFile(join(path, reportPath), content, { flag: 'wx' });
+        if (task.review) task.reviewHistory = [...(task.reviewHistory ?? []), task.review];
+        task.review = { id, status: 'pending_review', developRevision: stage.revision, taskAttempt: task.attempt, codeFingerprint: source, reportPath, submittedAt: new Date().toISOString() };
+      }
+      return spec;
+    });
+  }
+
+  async getImplementationReview(repoId: string, ticketId: string, subtaskId: string) {
+    const path = await this.repoPath(repoId);
+    const spec = await this.requireSpec(path, ticketId);
+    const task = spec.stages[3].subtasks?.find((task) => task.id === subtaskId);
+    if (!task?.review) throw new Error('No implementation review for this task.');
+    return { review: task.review, content: await fs.readFile(join(path, task.review.reportPath), 'utf8'), sourceChanged: task.review.codeFingerprint !== await fingerprint(this.sourcePath(spec, path), path) };
+  }
+
+  async reviewImplementation(repoId: string, ticketId: string, subtaskId: string, expectedReviewId: string, verdict: 'approved' | 'rejected' | 'needs_revision', comment?: string): Promise<SpecFile> {
+    return this.mutate(repoId, ticketId, async (spec, path) => {
+      this.stageMachine.assertCurrent(spec, 'develop', true);
+      const stage = spec.stages[3];
+      const task = stage.subtasks?.find((task) => task.id === subtaskId);
+      const review = task?.review;
+      if (!task?.completed || !review || review.id !== expectedReviewId || review.developRevision !== stage.revision || review.taskAttempt !== task.attempt || review.status !== 'pending_review') throw new Error('Implementation review changed. Refresh the report before reviewing.');
+      if (verdict === 'approved' && review.codeFingerprint !== await fingerprint(this.sourcePath(spec, path), path)) throw new Error('Implementation source changed. Submit a fresh review.');
+      if (verdict !== 'approved' && !comment?.trim()) throw new Error('A revision or rejection comment is required.');
+      review.status = verdict; review.comment = comment?.trim(); review.reviewedAt = new Date().toISOString();
+      if (verdict !== 'approved') {
+        task.reviewHistory = [...(task.reviewHistory ?? []), { ...review }];
+        resetTaskAndDependents(stage.subtasks!, subtaskId);
+        for (const other of stage.subtasks!) other.review = undefined;
+        stage.aiStatus = 'in_progress';
+      }
+      return spec;
+    });
+  }
+
+  async reopenStage(repoId: string, ticketId: string, stageId: StageId, reason: string, expectedRunId?: string): Promise<SpecFile> {
+    return this.mutate(repoId, ticketId, async (spec) => { if (spec.automation?.status === 'running') this.assertAutomationRun(spec, expectedRunId); return this.stageMachine.reopen(spec, stageId, reason); });
   }
 
   /** Replace the DEVELOP subtask list wholesale; updates derived aiStatus. */
   async setDevelopSubtasks(
     repoId: string,
     ticketId: string,
-    subtasks: SubtaskInput[]
+    subtasks: SubtaskInput[], expectedRunId?: string
   ): Promise<SpecFile> {
-    return this.mutate(repoId, ticketId, async (spec) => this.stageMachine.setSubtasks(spec, subtasks));
+    return this.mutate(repoId, ticketId, async (spec) => { this.assertAutomationRun(spec, expectedRunId); return this.stageMachine.setSubtasks(spec, subtasks); });
   }
 
   /** Toggle a single subtask's completed flag; updates derived aiStatus. */
   async toggleSubtask(repoId: string, ticketId: string, subtaskId: string): Promise<SpecFile> {
     return this.mutate(repoId, ticketId, async (spec, path) => {
+      this.assertAutomationRun(spec);
       const task = spec.stages[3].subtasks?.find((task) => task.id === subtaskId);
       if (!task) throw new Error(`Unknown subtask id: ${subtaskId}`);
       return this.completeSubtask(spec, path, subtaskId, !task.completed);
     });
   }
 
-  async setSubtaskCompleted(repoId: string, ticketId: string, subtaskId: string, completed: boolean, claimId?: string): Promise<SpecFile> {
-    return this.mutate(repoId, ticketId, (spec, path) => this.completeSubtask(spec, path, subtaskId, completed, claimId));
+  async setSubtaskCompleted(repoId: string, ticketId: string, subtaskId: string, completed: boolean, claimId?: string, expectedRunId?: string): Promise<SpecFile> {
+    return this.mutate(repoId, ticketId, (spec, path) => { this.assertAutomationRun(spec, expectedRunId); return this.completeSubtask(spec, path, subtaskId, completed, claimId); });
   }
 
   private async completeSubtask(spec: SpecFile, path: string, subtaskId: string, completed: boolean, claimId?: string): Promise<SpecFile> {
@@ -288,8 +363,8 @@ export class AppCore {
     return next;
   }
 
-  async claimSubtask(repoId: string, ticketId: string, subtaskId: string): Promise<SpecFile> {
-    return this.mutate(repoId, ticketId, async (spec) => { spec.execution.error = undefined; return this.stageMachine.claimSubtask(spec, subtaskId); });
+  async claimSubtask(repoId: string, ticketId: string, subtaskId: string, expectedRunId?: string): Promise<SpecFile> {
+    return this.mutate(repoId, ticketId, async (spec) => { this.assertAutomationRun(spec, expectedRunId); spec.execution.error = undefined; return this.stageMachine.claimSubtask(spec, subtaskId); });
   }
 
   async releaseSubtask(repoId: string, ticketId: string, subtaskId: string, claimId: string): Promise<SpecFile> {
@@ -302,8 +377,15 @@ export class AppCore {
     let actions = nextActions(spec);
     const stage = spec.stages.find((stage) => stage.id === spec.currentStageId)!;
     if (spec.execution.status !== 'paused' && spec.execution.status !== 'completed') {
+      const tasks = spec.stages[3].subtasks;
+      if (tasks?.length && !spec.legacyCompletion && (STAGE_IDS.indexOf(spec.currentStageId) >= 4 || (spec.currentStageId === 'develop' && tasks.every((task) => task.completed)))) {
+        const source = await fingerprint(await this.executionPath(repoId, ticketId), await this.repoPath(repoId));
+        const invalid = tasks.some((task) => !task.completed || task.review?.status !== 'approved' || task.review.developRevision !== spec.stages[3].revision || task.review.taskAttempt !== task.attempt || task.review.codeFingerprint !== source);
+        if (invalid && STAGE_IDS.indexOf(spec.currentStageId) >= 4) return { ...spec.execution, stageId: spec.currentStageId, actions: [{ tool: 'reopen_stage', stageId: 'develop' as const, reason: 'Implementation source changed or review is missing; review the current implementation.' }] };
+        if (spec.currentStageId === 'develop' && tasks.some((task) => task.review && task.review.codeFingerprint !== source)) actions = [{ tool: 'submit_implementation_review', stageId: 'develop', reason: 'Implementation source changed; submit fresh review reports.' }];
+      }
       const checks = spec.stages.slice(0, STAGE_IDS.indexOf(spec.currentStageId) + 1).filter((item) => !item.skipped && (item.id === 'test' || item.id === 'build'));
-      const code = checks.length ? await fingerprint(await this.repoPath(repoId)) : undefined;
+      const code = checks.length ? await fingerprint(await this.executionPath(repoId, ticketId), await this.repoPath(repoId)) : undefined;
       for (const check of checks) {
         if (check.activeCheck || (!check.evidence && check.id === stage.id && check.gate.status !== 'approved')) continue;
         try { if (check.id === 'test' || check.id === 'build') assertEvidence(check.evidence, check.id, code); }
@@ -319,7 +401,9 @@ export class AppCore {
   async pauseExecution(repoId: string, ticketId: string): Promise<SpecFile> {
     return this.mutate(repoId, ticketId, async (spec) => {
       if (spec.execution.status === 'completed') throw new Error('Completed execution cannot be paused.');
-      spec.execution.status = 'paused'; return spec;
+      spec.execution.status = 'paused';
+      if (spec.automation) { spec.automation.status = 'paused'; spec.automation.runId = undefined; }
+      return spec;
     });
   }
 
@@ -357,7 +441,11 @@ export class AppCore {
 
   async resumeExecution(repoId: string, ticketId: string): Promise<SpecFile> {
     return this.mutate(repoId, ticketId, async (spec, path) => {
-      await recoverRepositoryCheck(path);
+      if (processGroupAlive(spec.automation?.runnerPid)) throw new Error('Previous Codex process is still stopping. Wait before resuming.');
+      await recoverRepositoryCheck(this.sourcePath(spec, path));
+      if (await fs.stat(join(this.sourcePath(spec, path), '.specflow', 'repository-check.lock')).catch(() => null)) {
+        throw new Error('Previous platform check lock is still active. Wait before recovery.');
+      }
       spec.execution.status = 'ready'; spec.execution.error = undefined;
       for (const stage of spec.stages) if (stage.activeCheck) {
         let alive = true;
@@ -447,7 +535,7 @@ export class AppCore {
       filesCreated: string[];
       statistics: { linesAdded: number; linesRemoved: number };
       artifacts: ImplArtifacts;
-    }
+    }, expectedRunId?: string
   ): Promise<ImplementationLog> {
     const { artifacts } = input;
     const hasArtifacts =
@@ -466,9 +554,11 @@ export class AppCore {
 
     let log!: ImplementationLog;
     await this.mutate(repoId, ticketId, async (spec, path) => {
+      this.assertAutomationRun(spec, expectedRunId);
       this.stageMachine.assertImplementation(spec);
       if (!spec.stages[3].subtasks?.some((task) => task.id === subtaskId)) throw new Error(`Unknown subtask id: ${subtaskId}`);
       const task = spec.stages[3].subtasks!.find((task) => task.id === subtaskId)!;
+      if (task.review) throw new Error('Implementation is under review. Reset or revise the task before changing its log.');
       if (task.status === 'running' && task.claimId !== input.claimId) throw new Error('Current task claimId is required for logging.');
       log = await this.implLogs.write(path, ticketId, subtaskId, { ...input, developRevision: spec.stages[3].revision, taskAttempt: task.attempt });
       return spec;
@@ -488,6 +578,24 @@ export class AppCore {
 
   /* ---- internals ---- */
 
+  assertAutomationRun(spec: SpecFile, runId?: string): void {
+    if (spec.automation?.enabled && !runId) throw new Error('Managed ticket mutations require the current automation run. Disable automation before using an interactive agent.');
+    if (runId && (spec.automation?.runId !== runId || spec.automation.status !== 'running' || !spec.automation.enabled || spec.execution.status === 'paused')) throw new Error('Automation run is no longer current; discard its result.');
+  }
+
+  async updateAutomation(repoId: string, ticketId: string, op: (spec: SpecFile) => void): Promise<SpecFile> {
+    return this.mutate(repoId, ticketId, async (spec) => { op(spec); return spec; });
+  }
+
+  async configureAutomation(repoId: string, ticketId: string, enabled: boolean): Promise<SpecFile> {
+    return this.updateAutomation(repoId, ticketId, (spec) => {
+      if (spec.automation?.status === 'running') throw new Error('Pause the active run before changing automation.');
+      if (processGroupAlive(spec.automation?.runnerPid)) throw new Error('Previous Codex process is still alive. Stop it before retrying.');
+      if (enabled) spec.execution.error = undefined;
+      spec.automation = { ...spec.automation, enabled, status: spec.execution.status === 'completed' ? 'completed' : spec.execution.status === 'paused' ? 'paused' : 'queued', attempt: spec.automation?.attempt ?? 0, error: undefined, runId: undefined };
+    });
+  }
+
   private async requireSpec(path: string, ticketId: string): Promise<SpecFile> {
     const spec = await this.store.read(path, ticketId);
     if (!spec) throw new Error(`Unknown spec: ${ticketId}`);
@@ -499,6 +607,7 @@ export class AppCore {
     const saved = await this.store.transaction(path, ticketId, async (spec) => {
       if (!spec) throw new Error(`Unknown spec: ${ticketId}`);
       const next = synchronizeExecution(await op(spec, path));
+      next.stateVersion = (spec.stateVersion ?? 0) + 1;
       next.updatedAt = new Date().toISOString();
       return next;
     });

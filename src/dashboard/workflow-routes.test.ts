@@ -3,7 +3,7 @@ import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { AppCore } from '../core/app-core.js';
-import { buildDashboard } from './server.js';
+import { buildDashboard } from '../test-support/dashboard-session.js';
 
 it('REST validates artifact revisions and exposes rework and pause/resume', async () => {
   const home = await fs.mkdtemp(join(tmpdir(), 'routes-home-'));

@@ -11,6 +11,7 @@ import { registerWorkflowRoutes } from './workflow-routes.js';
 import { logger } from '../core/logger.js';
 import { pickFolder } from './folder-picker.js';
 import type { WebSocket } from 'ws';
+import { registerReviewSession } from './review-session.js';
 
 /**
  * The dashboard HTTP+WS server. The human lives here: they Approve/Reject
@@ -23,11 +24,15 @@ import type { WebSocket } from 'ws';
 export interface DashboardOptions {
   port?: number;
   host?: string;
+  runnerEnabled?: boolean;
 }
 
-export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
+export async function buildDashboard(app: AppCore, options: DashboardOptions = {}): Promise<FastifyInstance> {
   const fastify = Fastify({ logger: false });
-  registerWorkflowRoutes(fastify, app);
+  const runnerEnabled = options.runnerEnabled ?? false;
+  registerReviewSession(fastify);
+  registerWorkflowRoutes(fastify, app, runnerEnabled);
+  fastify.get('/api/automation', async () => ({ available: runnerEnabled }));
   await fastify.register(fastifyWebsocket);
 
   const sockets = new Set<WebSocket>();
@@ -123,6 +128,7 @@ export async function buildDashboard(app: AppCore): Promise<FastifyInstance> {
       const input = WorkflowOptionsSchema.extend({ ticketId: z.string().min(1), title: z.string().min(1) }).safeParse(req.body);
       if (!input.success) return reply.code(400).send({ error: input.error.message });
       const { ticketId, title, ...options } = input.data;
+      if (options.autoRun && !runnerEnabled) return reply.code(400).send({ error: 'Start Dashboard with --runner to enable automatic Codex execution.' });
       try {
         return await app.createSpec(req.params.repoId, ticketId, title, options);
       } catch (e) {
@@ -275,7 +281,7 @@ export async function startDashboard(
 ): Promise<{ fastify: FastifyInstance; url: string }> {
   const host = options.host ?? '127.0.0.1';
   const port = options.port ?? 4123;
-  const fastify = await buildDashboard(app);
+  const fastify = await buildDashboard(app, options);
   await fastify.listen({ host, port });
   const url = `http://${host}:${port}`;
   logger.info(`Dashboard listening at ${url}`);

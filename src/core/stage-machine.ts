@@ -77,6 +77,7 @@ export class StageMachine {
       currentStageId: 'spec',
       acceptanceCriteria: [],
       workflow,
+      automation: workflow.autoRun ? { enabled: true, status: 'queued', attempt: 0 } : undefined,
       execution: { status: 'ready', retryCount: 0 },
       stages,
       gateHistory: [],
@@ -134,7 +135,7 @@ export class StageMachine {
       stage.gate.actor = undefined;
       stage.gate.comment = stage.id === stageId ? reason.trim() : undefined;
       this.transitionGate(next, stage, stage.id === stageId ? 'needs_revision' : 'not_ready');
-      stage.subtasks?.forEach((task) => { task.completed = false; task.status = 'pending'; task.claimId = undefined; task.attempt++; });
+      stage.subtasks?.forEach((task) => { task.completed = false; task.status = 'pending'; task.claimId = undefined; task.attempt++; task.review = undefined; });
     }
     next.reworkHistory.push({ stageId, reason: reason.trim(), at: now() });
     next.currentStageId = stageId;
@@ -212,6 +213,9 @@ export class StageMachine {
       }
     }
 
+    if (stageId === 'develop' && stage.subtasks?.some((task) => task.review?.status !== 'approved' || task.review.developRevision !== stage.revision || task.review.taskAttempt !== task.attempt)) {
+      throw new Error('Human implementation review is required for every completed subtask before advancement.');
+    }
     if (stageId === 'test' || stageId === 'build') assertEvidence(stage.evidence, stageId);
 
     const index = STAGE_IDS.indexOf(stageId);
@@ -287,6 +291,7 @@ export class StageMachine {
       if (!task) throw new Error('Unknown subtask id: ' + subtaskId);
       if ((task.status === 'running' || claimId) && task.claimId !== claimId) throw new Error('Current task claimId is required.');
       if (task.completed === completed) return;
+      for (const other of stage.subtasks ?? []) other.review = undefined;
       if (completed) {
         if (!task.dependsOn.every((id) => stage.subtasks?.some((dependency) => dependency.id === id && dependency.completed))) throw new Error('Task dependency is not complete.');
         task.completed = true; task.status = 'done';

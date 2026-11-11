@@ -28,6 +28,9 @@ export function nextActions(spec: SpecFile): NextAction[] {
       ];
     }
     if (stage.id === 'develop' && !stage.subtasks?.length) return [action('set_develop_subtasks', 'Register and resubmit a non-empty implementation plan.')];
+    if (stage.id === 'develop' && stage.subtasks?.some((task) => task.review?.status !== 'approved')) {
+      return [action(stage.subtasks.some((task) => !task.review) ? 'submit_implementation_review' : 'get_implementation_review', 'Human review of completed implementation is required before TEST.')];
+    }
     return [action('advance_stage', 'Current revision is approved and execution is complete.')];
   }
   if (stage.id === 'develop' && !stage.subtasks?.length) return [action('set_develop_subtasks', 'Register the implementation plan, then submit its summary for approval.')];
@@ -40,7 +43,7 @@ export function synchronizeExecution(spec: SpecFile): SpecFile {
   if (stage.activeCheck || stage.subtasks?.some((task) => task.status === 'running')) spec.execution.status = 'running';
   else if (spec.execution.error) spec.execution.status = 'failed';
   else if (stage.id === 'ops' && stage.gate.status === 'approved') spec.execution.status = 'completed';
-  else if (stage.gate.status === 'pending_review') spec.execution.status = 'waiting_review';
+  else if (stage.gate.status === 'pending_review' || stage.subtasks?.some((task) => task.review?.status === 'pending_review')) spec.execution.status = 'waiting_review';
   else spec.execution.status = 'ready';
   return spec;
 }

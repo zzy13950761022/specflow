@@ -5,7 +5,8 @@ import { join } from 'path';
 import type { FastifyInstance } from 'fastify';
 import { WebSocket } from 'ws';
 import { AppCore } from '../core/app-core.js';
-import { buildDashboard, startDashboard } from './server.js';
+import { startDashboard } from './server.js';
+import { buildDashboard } from '../test-support/dashboard-session.js';
 import { prepareStage, prepareImplementation, recordTaskLog } from '../test-support/workflow-fixtures.js';
 
 let home: string;
