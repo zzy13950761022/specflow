@@ -10,7 +10,7 @@ import { filterSpecs, readBoardFilters, writeBoardFilters, type BoardFilters } f
 import { STAGE_IDS, STAGE_LABELS } from '../types';
 
 export function BoardPage() {
-  const { repos, activeRepo, specs, setError, setActiveRepo, refreshSpecs } = useAppState();
+  const { activeRepo, specs, setError, setActiveRepo, refreshSpecs } = useAppState();
   const [view, setView] = useState<'board' | 'prompts'>('board');
   const [creating, setCreating] = useState(false);
   const [params, setParams] = useSearchParams();
@@ -38,7 +38,7 @@ export function BoardPage() {
       {specs.length > 0 && visible.length === 0 ? <div className="glass rounded-2xl flex-1 grid place-items-center text-slate-500 text-sm">No specs match your filters.</div> : <Board repoId={activeRepo} specs={visible} />}
     </>}
     {view === 'prompts' && <PromptsPanel repoId={activeRepo} onError={setError} />}
-    {creating && <NewSpec repos={repos} activeRepo={activeRepo} onClose={() => setCreating(false)} onCreate={async (repoId, ticketId, title, options) => {
+    {creating && <NewSpec activeRepo={activeRepo} onClose={() => setCreating(false)} onCreate={async (repoId, ticketId, title, options) => {
       const created = await api.createSpec(repoId, ticketId, title, options);
       setActiveRepo(repoId);
       await refreshSpecs(repoId);

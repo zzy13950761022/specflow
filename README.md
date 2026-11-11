@@ -331,8 +331,9 @@ protocol. Copy only the selected provider's transport, not native hooks, plugins
 MCP servers or command approval preferences. OpenCode configuration compatibility
 is checked against its [official schema](https://opencode.ai/config.json).
 
-**Create Spec** asks for repository, ticket ID, description, workflow and execution
-configuration (preselected from **User default**). The first description line
+**Create Spec** uses the repository selected on the main board and asks for ticket
+ID, description, workflow and execution configuration (preselected from **User
+default**). The first description line
 becomes the title, capped at 120 characters. Dashboard creation always uses normal
 risk and starts the selected Agent, with automatic check approval disabled.
 Click **Create & Start**; launch failures remain on the persisted ticket with a

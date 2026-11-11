@@ -1,14 +1,13 @@
 import { configurationLabel } from '../lib/agent-profiles';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { type AgentSettings, type CreateSpecOptions, type RepoEntry } from '../types';
+import { type AgentSettings, type CreateSpecOptions } from '../types';
 import { Dialog } from './Dialog';
 
-export function NewSpec({ repos, activeRepo, onClose, onCreate }: {
-  repos: RepoEntry[]; activeRepo: string; onClose: () => void;
+export function NewSpec({ activeRepo, onClose, onCreate }: {
+  activeRepo: string; onClose: () => void;
   onCreate: (repoId: string, ticketId: string, title: string, options: CreateSpecOptions) => Promise<void>;
 }) {
-  const [repoId, setRepoId] = useState(activeRepo);
   const [ticketId, setTicketId] = useState('');
   const [description, setDescription] = useState('');
   const [workflowKind, setWorkflowKind] = useState<'standard' | 'bugfix' | 'documentation'>('standard');
@@ -22,7 +21,7 @@ export function NewSpec({ repos, activeRepo, onClose, onCreate }: {
     api.agentSettings().then((value) => { if (alive) setSettings(value); }).catch((e) => { if (alive) setSettingsError(e.message); });
     return () => { alive = false; };
   }, []);
-  useEffect(() => { if (settings) setProfileId(settings.defaultProfileId ?? ''); }, [repoId, settings]);
+  useEffect(() => { if (settings) setProfileId(settings.defaultProfileId ?? ''); }, [settings]);
   const selectedProfile = settings?.profiles.find((profile) => profile.id === profileId);
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -31,7 +30,7 @@ export function NewSpec({ repos, activeRepo, onClose, onCreate }: {
     const title = Array.from(summary).slice(0, 120).join('') || ticketId.trim();
     setBusy(true); setError(null);
     try {
-      await onCreate(repoId, ticketId.trim(), title.trim(), { description: description.trim() || undefined, workflowKind, risk: 'normal', autoChecks: false, autoRun: true, agentProfileId: selectedProfile.id });
+      await onCreate(activeRepo, ticketId.trim(), title.trim(), { description: description.trim() || undefined, workflowKind, risk: 'normal', autoChecks: false, autoRun: true, agentProfileId: selectedProfile.id });
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -40,7 +39,6 @@ export function NewSpec({ repos, activeRepo, onClose, onCreate }: {
       <form onSubmit={create}>
         <div className="dialog-body">
         <fieldset disabled={busy} className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <label className="field sm:col-span-2">Repository<select aria-label="Repository" value={repoId} onChange={(e) => setRepoId(e.target.value)}>{repos.map((repo) => <option value={repo.id} key={repo.id}>{repo.name} — {repo.path}</option>)}</select></label>
           <label className="field">Ticket ID<input required data-autofocus value={ticketId} onChange={(e) => setTicketId(e.target.value)} placeholder="TICKET-123" /></label>
           <label className="field">Workflow type<select aria-label="Workflow type" value={workflowKind} onChange={(e) => setWorkflowKind(e.target.value as typeof workflowKind)}><option value="standard">Standard feature</option><option value="bugfix">Bug fix</option><option value="documentation">Documentation only</option></select></label>
           <label className="field sm:col-span-2">Description<textarea required maxLength={30000} rows={5} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Start with a short summary, then describe the requirements and acceptance criteria…" /></label>

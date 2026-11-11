@@ -581,6 +581,7 @@ test('Create Spec only asks for ticket requirements and starts Dashboard with no
   await page.getByRole('button', {name: 'Create Spec', exact: true}).click();
   const dialog = page.getByRole('dialog', {name: 'Create Spec'});
   await expect(dialog.getByLabel('Execution configuration')).toHaveValue('codex-local');
+  await expect(dialog.getByLabel('Repository', {exact: true})).toHaveCount(0);
   await expect(dialog.getByLabel('Title', {exact: true})).toHaveCount(0);
   await expect(dialog.getByLabel('Change risk', {exact: true})).toHaveCount(0);
   await expect(dialog.getByLabel('Execution', {exact: true})).toHaveCount(0);
@@ -591,7 +592,7 @@ test('Create Spec only asks for ticket requirements and starts Dashboard with no
   await dialog.getByRole('button', {name: 'Create & Start', exact: true}).click();
   await expect.poll(() => state.creations.length).toBe(1);
   expect(state.creations[0]).toMatchObject({ticketId: 'SIMPLE-1', title: 'Calculate shipping', description: '# Calculate shipping\n\nAmounts are integer cents.', risk: 'normal', autoRun: true, autoChecks: false, agentProfileId: 'codex-local'});
-  await expect(page).toHaveURL(/specs\/SIMPLE-1/);
+  await expect(page).toHaveURL(/repos\/ui-repo\/specs\/SIMPLE-1/);
 });
 
 test('Create Spec requires an execution configuration instead of silently creating an IDE ticket', async ({ page }) => {
