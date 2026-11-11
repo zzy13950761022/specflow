@@ -15,7 +15,7 @@ SPEC → REQUIREMENTS → DESIGN → DEVELOP → TEST → BUILD → DEPLOY → O
 **Prerequisites:** Node.js 20+, an MCP-compatible coding client
 
 ```bash
-# From the AI Pilot component directory (mcp/ai-pilot in the team repository):
+# From the AI Pilot component directory (mcp/specflow-mcp in the team repository):
 npm install
 npm run build
 ```
