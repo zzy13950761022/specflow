@@ -55,9 +55,9 @@ export function SpecDetailPage() {
   const boardPath = '/' + (boardSearch ? '?' + boardSearch : '');
   const selectStage = (id: StageId) => { const next = new URLSearchParams(searchParams); next.set('stage', id); setSearchParams(next, { replace: true }); };
 
-  // Scroll the panel into view when the selected stage changes.
+  // Reset the document scroll without moving the surrounding navigation.
   useEffect(() => {
-    if (selectedStageId) panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (selectedStageId) panelRef.current?.scrollTo({ top: 0 });
   }, [selectedStageId]);
 
   // Keep annotation drafts scoped to one ticket, stage and artifact revision.
@@ -100,25 +100,24 @@ export function SpecDetailPage() {
   const selectedStage = spec.stages.find((s) => s.id === selectedStageId)!;
 
   return (
-    <div className="flex-1 flex flex-col gap-4 min-h-0">
+    <div className="flex-1 flex flex-col gap-2 min-h-0 min-w-0">
       {/* top: back link + title */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-3 shrink-0 min-w-0">
         <Link
           to={boardPath}
-          className="text-sm text-slate-500 hover:text-gray-800 rounded-lg px-2 py-1 bg-blue-50"
+          className="text-sm text-slate-500 hover:text-gray-800 rounded-lg px-2 py-1 bg-blue-50 shrink-0"
         >
           ← Board
         </Link>
-        <span className="font-semibold text-sm">{spec.ticketId}</span>
+        <span className="font-semibold text-sm shrink-0">{spec.ticketId}</span>
         <span className="text-sm text-slate-500 truncate" title={spec.title}>
           {spec.title}
         </span>
       </div>
 
       {/* top: timeline */}
-      {spec.description && <details className="text-sm text-slate-600"><summary className="cursor-pointer">Description</summary><p className="mt-2 whitespace-pre-wrap">{spec.description}</p></details>}
       <WorkflowControls profileId={agentProfileId} onProfileChange={setAgentProfileId} repoId={repoId} spec={spec} stage={selectedStage} onDone={() => refreshSpecs(repoId)} />
-      <div className="glass rounded-2xl px-4 py-3 shrink-0">
+      <div className="glass rounded-xl px-2 py-1 shrink-0 min-w-0">
         <StageTimeline
           spec={spec}
           activeStageId={activeStageId}
@@ -128,7 +127,7 @@ export function SpecDetailPage() {
       </div>
 
       {/* middle: scrollable stage panel */}
-      <div ref={panelRef} className="flex-1 overflow-auto">
+      <div ref={panelRef} role="region" aria-label="Stage content" tabIndex={0} className="flex-1 min-h-0 overflow-auto rounded-xl">
         <StagePanel
           key={repoId + ":" + ticketId + ":" + selectedStage.id + ":" + selectedStage.revision}
           onReviewReady={setReview}
@@ -145,7 +144,7 @@ export function SpecDetailPage() {
       </div>
 
       {/* bottom: fixed approval bar for the selected stage */}
-      <div className="glass rounded-2xl px-5 py-3 shrink-0">
+      <div className="glass rounded-xl px-3 py-2 shrink-0 max-h-[35vh] overflow-auto">
         {selectedStage.gate.status === 'pending_review' && review?.stageId === selectedStage.id && review.revision === selectedStage.revision ? (
           <GateActions
             key={repoId + ":" + ticketId + ":" + selectedStage.id + ":" + review.revision}

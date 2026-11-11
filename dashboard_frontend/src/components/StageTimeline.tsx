@@ -1,4 +1,3 @@
-import { GATE_STYLES } from '../lib/stage';
 import { STAGE_LABELS, type SpecFile, type Stage, type StageId } from '../types';
 
 export function StageDot({ stage, active }: { stage: Stage; active: boolean }) {
@@ -32,76 +31,26 @@ export function StageTimeline({
   onSelectStage: (stageId: StageId) => void;
 }) {
   return (
-    <div className="pt-3 overflow-x-auto">
-      <div className="flex items-start min-w-max gap-0">
-        {spec.stages.map((stage, i) => {
-          const isApproved = stage.gate.status === 'approved';
-          const isPending = stage.gate.status === 'pending_review';
-          const isRejected = stage.gate.status === 'rejected';
-          const isRevision = stage.gate.status === 'needs_revision';
-          const isActive = stage.id === activeStageId;
+    <nav aria-label="Workflow stages" className="overflow-x-auto">
+      <div className="flex gap-1 w-max min-w-full">
+        {spec.stages.map((stage, index) => {
           const isSelected = stage.id === selectedStageId;
-          const isFuture = !isApproved && !isActive;
-          const isLast = i === spec.stages.length - 1;
-
-          const nodeColor = isApproved
-            ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
-            : isPending
-              ? 'border-amber-400 bg-amber-50 text-amber-600'
-              : isRejected
-                ? 'border-red-400 bg-red-50 text-red-600'
-                : isRevision
-                  ? 'border-orange-400 bg-orange-50 text-orange-600'
-                  : isActive
-                    ? 'border-blue-500 bg-blue-100 text-blue-600'
-                    : 'border-slate-200 bg-white text-slate-400';
-
-          const lineColor = isApproved ? 'bg-emerald-300' : 'bg-slate-200';
-
-          return (
-            <div key={stage.id} className="flex items-start">
-              {/* node + label */}
-              <div className="flex flex-col items-center w-20">
-                <button
-                  onClick={() => onSelectStage(stage.id)}
-                  aria-label={'Select ' + STAGE_LABELS[stage.id]}
-                  title={`Select ${STAGE_LABELS[stage.id]}`}
-                  className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition ${nodeColor} ${
-                    isSelected ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-white' : ''
-                  } hover:scale-110 cursor-pointer`}
-                >
-                  {stage.skipped ? '−' : stage.stale ? '↩' : isApproved ? '✓' : isRejected ? '✗' : isRevision ? '↩' : isPending ? '…' : i + 1}
-                </button>
-                <span
-                  className={`text-[10px] mt-1 text-center leading-tight ${isFuture ? 'text-slate-400' : isSelected ? 'text-gray-800 font-semibold' : isActive ? 'text-gray-800' : 'text-slate-500'}`}
-                >
-                  {STAGE_LABELS[stage.id]}
-                </span>
-                {stage.skipped && <span className="text-[10px] text-slate-400" title={stage.skipReason}>skipped</span>}
-                {stage.stale && <span className="text-[10px] text-orange-600">outdated</span>}
-                {isActive && (
-                  <span
-                    className={`text-[10px] mt-0.5 rounded-full px-1.5 py-px text-center ${GATE_STYLES[stage.gate.status]}`}
-                  >
-                    {stage.gate.status.replace(/_/g, ' ')}
-                  </span>
-                )}
-                {(isRejected || isRevision) && stage.gate.comment && (
-                  <p
-                    className="text-[10px] text-red-600/70 italic mt-0.5 text-center max-w-[72px] truncate"
-                    title={stage.gate.comment}
-                  >
-                    "{stage.gate.comment}"
-                  </p>
-                )}
-              </div>
-
-              {/* connector line */}
-              {!isLast && <div className={`w-8 h-0.5 mt-4 shrink-0 ${lineColor}`} />}
-            </div>
-          );
+          const isActive = stage.id === activeStageId;
+          const approved = stage.gate.status === 'approved';
+          const rejected = stage.gate.status === 'rejected';
+          const revision = stage.stale || stage.gate.status === 'needs_revision';
+          const status = stage.skipped ? 'skipped' : stage.stale ? 'outdated' : stage.gate.status.replaceAll('_', ' ');
+          const symbol = stage.skipped ? '−' : revision ? '↩' : approved ? '✓' : rejected ? '✗' : stage.gate.status === 'pending_review' ? '…' : index + 1;
+          return <button key={stage.id} onClick={() => onSelectStage(stage.id)}
+            aria-label={'Select ' + STAGE_LABELS[stage.id]} aria-pressed={isSelected} aria-current={isActive ? 'step' : undefined}
+            title={STAGE_LABELS[stage.id] + ': ' + status + (stage.gate.comment ? ' — ' + stage.gate.comment : '')}
+            className={'flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-2 text-xs transition ' + (isSelected ? 'border-blue-300 bg-blue-50 text-blue-800 font-semibold' : 'border-transparent text-slate-500 hover:bg-blue-50')}>
+            <span aria-hidden="true" className={approved ? 'text-emerald-600' : rejected || revision ? 'text-orange-600' : isActive ? 'text-blue-600' : 'text-slate-400'}>{symbol}</span>
+            {STAGE_LABELS[stage.id]}
+            {(stage.skipped || stage.stale) && <span className="text-[10px]">({status})</span>}
+          </button>;
         })}
       </div>
-    </div>
+    </nav>
   );
 }

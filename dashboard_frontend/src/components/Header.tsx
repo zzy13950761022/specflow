@@ -4,12 +4,14 @@ import { AgentSettingsDialog } from './AgentSettingsDialog';
 import type { RepoEntry } from '../types';
 
 export function Header({
+  compact = false,
   repos,
   activeRepo,
   onSelect,
   onAdd,
   onBrowse,
 }: {
+  compact?: boolean;
   repos: RepoEntry[];
   activeRepo: string | null;
   onSelect: (id: string) => void;
@@ -23,7 +25,7 @@ export function Header({
   const active = repos.find((r) => r.id === activeRepo);
 
   return (
-    <header className="glass m-4 mb-0 rounded-2xl px-6 py-3 flex items-center gap-4">
+    <header className={compact ? "glass mx-3 mt-2 rounded-xl px-3 py-2 flex items-center gap-3 shrink-0" : "glass m-4 mb-0 rounded-2xl px-6 py-3 flex items-center gap-4 shrink-0"}>
       <div className="w-8 h-8 rounded-xl joule-gradient joule-glow shrink-0" />
       <div className="shrink-0">
         <h1 className="text-base font-semibold tracking-tight leading-tight">AI Pilot</h1>

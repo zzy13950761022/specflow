@@ -88,10 +88,10 @@ export function StagePanel({
   const markdownMetrics = artifact?.kind === 'markdown' ? artifact.metrics : undefined;
 
   return (
-    <div className="glass rounded-2xl flex flex-col gap-4 p-5 min-h-full">
+    <div className="glass rounded-xl flex flex-col gap-2 p-3 min-h-full">
       <IdeHandoff profileId={agentProfileId} repoId={repoId} spec={spec} onDone={onDone} />
       {/* header: stage label + aiStatus + gateStatus + artifact kind + comment */}
-      <div className="flex items-center gap-2 flex-wrap border-b border-blue-100 pb-3">
+      <div className="flex items-center gap-2 flex-wrap border-b border-blue-100 pb-2">
         <span className="font-semibold text-sm">{STAGE_LABELS[stage.id]}</span>
         <span
           className={`text-[11px] rounded-full px-2 py-0.5 ${AI_STATUS_STYLES[stage.aiStatus]}`}
@@ -105,6 +105,7 @@ export function StagePanel({
         >
           Gate: {stage.gate.status.replace(/_/g, ' ')}
         </span>
+        <span className="text-[11px] text-slate-500 ml-auto">Revision {stage.revision}{stage.gate.actor === 'policy' ? ' · approved by check policy' : ''}</span>
         {artifact && (
           <span className="text-[10px] rounded-full bg-blue-50 px-2 py-0.5 text-slate-500">
             {artifact.kind}
@@ -119,7 +120,6 @@ export function StagePanel({
       </div>
 
       {/* body */}
-      <p className="text-xs text-slate-500">Artifact revision: {stage.revision} {stage.gate.actor === 'policy' ? '· approved by check policy' : ''}</p>
       {stage.skipped && <p className="rounded-lg bg-slate-100 p-3 text-sm">Skipped: {stage.skipReason}</p>}
       {stage.stale && stage.artifact && <p className="rounded-lg bg-orange-100 p-3 text-sm" role="status">Outdated artifact: {stage.staleReason}. This content is retained for reference and requires rework.</p>}
       {stage.evidence && (

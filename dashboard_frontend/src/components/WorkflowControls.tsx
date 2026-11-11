@@ -1,9 +1,11 @@
+import { boardStatus } from '../lib/board';
 import { configurationLabel } from '../lib/agent-profiles';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { AGENT_LABELS, type AgentSettings, type SpecFile, type Stage } from '../types';
 
 export function WorkflowControls({ repoId, spec, stage, onDone, profileId, onProfileChange }: { repoId: string; spec: SpecFile; stage: Stage; onDone: () => void; profileId: string; onProfileChange: (id: string) => void }) {
+  const [showDetails, setShowDetails] = useState(false);
   const [reason, setReason] = useState('');
   const [reworking, setReworking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -28,15 +30,13 @@ export function WorkflowControls({ repoId, spec, stage, onDone, profileId, onPro
   const active = spec.currentStageId === stage.id;
   const canAdvance = active && !spec.automation?.enabled && stage.gate.status === 'approved' && stage.id !== 'ops' && (stage.id !== 'develop' || (stage.subtasks?.length && stage.subtasks.every((task) => task.completed && task.review?.status === 'approved')));
   return (
-    <div className="glass rounded-2xl px-4 py-3 flex flex-col gap-2">
-      <div className="flex flex-wrap gap-3 items-center text-sm">
-        <span>{spec.workflow.workflowKind} · {spec.workflow.risk} risk</span>
-        <span>Execution: {spec.execution.status.replaceAll('_', ' ')}</span>
-        {spec.automation && <span>{spec.automation.profile ? AGENT_LABELS[spec.automation.profile.agent] : 'Agent'}: {spec.automation.status.replaceAll('_', ' ')}{spec.automation.profile ? ' · ' + spec.automation.profile.name : ''}{spec.automation.mode === 'ide' ? ' · IDE' : ''}</span>}
+    <div className="glass rounded-xl px-3 py-2 flex flex-col gap-2 shrink-0 max-h-[35vh] overflow-y-auto">
+      <div className="flex flex-wrap gap-2 items-center text-xs">
+        <span className="font-medium text-slate-700 mr-auto">{spec.automation?.profile ? AGENT_LABELS[spec.automation.profile.agent] + ' · ' : ''}{boardStatus(spec).replaceAll('_', ' ')}{spec.automation?.mode === 'ide' ? ' · IDE' : ''}</span>
+        <button aria-expanded={showDetails} onClick={() => setShowDetails(!showDetails)} className="rounded-lg px-2 py-1 text-slate-600 hover:bg-blue-50">Execution details</button>
         {(runnerAvailable || !!settings?.profiles.length) && !spec.automation?.enabled && spec.execution.status !== 'completed' && spec.automation?.mode !== 'ide' && <button disabled={busy} className="rounded-lg px-3 py-1 bg-blue-100 disabled:opacity-50" onClick={() => run(() => api.configureAutomation(repoId, spec.ticketId, true, profileId || undefined))}>Run in Dashboard</button>}
         {spec.automation?.status === 'failed' && <button disabled={busy} className="rounded-lg px-3 py-1 bg-orange-100 disabled:opacity-50" onClick={() => run(() => api.retryAutomation(repoId, spec.ticketId))}>Retry agent execution</button>}
-        {!spec.automation?.enabled && !!settings?.profiles.length && <label className="text-xs flex items-center gap-2">Execution configuration<select aria-label="Execution configuration" className="toolbar-control" value={profileId} onChange={(e) => onProfileChange(e.target.value)}><option value="">{spec.automation?.profile ? 'Keep current configuration · ' + spec.automation.profile.name + ' v' + spec.automation.profile.version : 'Use default configuration'}</option>{settings.profiles.map((profile) => <option key={profile.id} value={profile.id}>{configurationLabel(profile)}</option>)}</select></label>}
-        <span className="text-xs text-slate-500">Retries: {spec.execution.retryCount}</span>
+        {!spec.automation?.enabled && !!settings?.profiles.length && <label className="text-xs flex items-center gap-2">Execution configuration<select aria-label="Execution configuration" className="toolbar-control max-w-[18rem]" value={profileId} onChange={(e) => onProfileChange(e.target.value)}><option value="">{spec.automation?.profile ? 'Keep current configuration · ' + spec.automation.profile.name + ' v' + spec.automation.profile.version : 'Use default configuration'}</option>{settings.profiles.map((profile) => <option key={profile.id} value={profile.id}>{configurationLabel(profile)}</option>)}</select></label>}
         {spec.execution.status !== 'completed' && (
           <button disabled={busy} className="rounded-lg px-3 py-1 bg-blue-100 disabled:opacity-50" onClick={() => run(() => paused ? api.resume(repoId, spec.ticketId) : api.pause(repoId, spec.ticketId))}>
             {paused ? 'Resume execution' : 'Pause execution'}
@@ -52,11 +52,16 @@ export function WorkflowControls({ repoId, spec, stage, onDone, profileId, onPro
           </button>
         )}
       </div>
-      {spec.execution.lastSuccessfulStep && <p className="text-xs text-slate-500">Last successful step: {spec.execution.lastSuccessfulStep}</p>}
       {spec.automation?.error && <p role="alert" className="text-sm text-red-600">{spec.automation.error}</p>}
-      {spec.automation?.worktreePath && <p className="text-xs text-slate-500 break-all">Workspace: {spec.automation.worktreePath}</p>}
-      {spec.automation?.threadId && <p className="text-xs text-slate-500 break-all">Agent session: {spec.automation.threadId}</p>}
-      {next && <p className="text-xs text-slate-500">{next}</p>}
+      {showDetails && <div className="border-t border-blue-100 pt-2 text-xs text-slate-500 space-y-1">
+        <p>{spec.workflow.workflowKind} · {spec.workflow.risk} risk · Retries: {spec.execution.retryCount}</p>
+        {spec.automation?.profile && <p>Configuration: {configurationLabel(spec.automation.profile)}</p>}
+        {spec.execution.lastSuccessfulStep && <p>Last successful step: {spec.execution.lastSuccessfulStep}</p>}
+        {spec.automation?.worktreePath && <p className="break-all">Workspace: {spec.automation.worktreePath}</p>}
+        {spec.automation?.threadId && <p className="break-all">Agent session: {spec.automation.threadId}</p>}
+        {next && <p>{next}</p>}
+        {spec.description && <p className="whitespace-pre-wrap pt-1"><strong>Description:</strong> {spec.description}</p>}
+      </div>}
       {reworking && (
         <div className="flex gap-2">
           <input aria-label="Rework reason" placeholder="Why does this stage need rework?" value={reason} onChange={(event) => setReason(event.target.value)} className="flex-1 border border-blue-200 rounded-lg p-2 text-sm" />

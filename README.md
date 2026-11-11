@@ -367,7 +367,11 @@ before host-applied writes. Unknown interactive permissions fail the turn rather
 than implying human approval. These are managed runtime/tool boundaries, not
 independent identity attestation against unrestricted same-user local programs.
 
-Every Stage starts with **Continue in VS Code**. **Copy context** is read-only.
+Ticket details use compact stage navigation and a scrollable artifact area, with
+approval actions kept at the bottom. **Execution details** expands the description,
+configuration, workspace, session and next-step information. Every Stage starts
+with a compact **Continue in VS Code** toolbar that scrolls with the document.
+**Copy context** is read-only.
 **Continue in IDE** cancels the managed run, waits for the owned process to exit,
 and transfers the ticket to IDE execution. Active platform checks must finish
 first. The copied context names the canonical repository ID, ticket and actual

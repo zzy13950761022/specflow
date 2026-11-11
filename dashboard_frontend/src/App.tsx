@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useMatch } from 'react-router-dom';
 import { api, connectWs } from './api';
 import { Header } from './components/Header';
 import { AppContext } from './context/AppContext';
 import type { RepoEntry, SpecFile } from './types';
 
 export function App() {
+  const isDetail = !!useMatch('/repos/:repoId/specs/:ticketId');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [specs, setSpecs] = useState<SpecFile[]>([]);
@@ -54,6 +55,7 @@ export function App() {
     >
       <div className="h-screen w-screen flex flex-col overflow-hidden">
         <Header
+          compact={isDetail}
           repos={repos}
           activeRepo={activeRepo}
           onSelect={setActiveRepo}
@@ -74,7 +76,7 @@ export function App() {
             }
           }}
         />
-        <main className="flex-1 flex flex-col gap-4 p-4 overflow-auto">
+        <main className={isDetail ? "flex-1 min-h-0 flex flex-col gap-2 p-3 overflow-hidden" : "flex-1 flex flex-col gap-4 p-4 overflow-auto"}>
           {error && (
             <div className="glass rounded-xl px-4 py-2 text-sm text-red-600 border-red-400/40">
               {error}

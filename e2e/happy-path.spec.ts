@@ -99,7 +99,7 @@ test('happy path: add repo, create spec, Claude records output, human approves, 
   await page.getByRole('button', { name: 'Advance stage', exact: true }).click();
   const specUrl = 'http://127.0.0.1:' + PORT + '/api/repos/' + repoId + '/specs/E2E-1';
   await expect.poll(async () => (await (await fetch(specUrl)).json()).currentStageId).toBe('develop');
-  await expect(page.getByText('skipped', { exact: true })).toHaveCount(2);
+  for (const label of ['REQUIREMENTS', 'DESIGN']) await expect(page.getByRole('button', { name: 'Select ' + label, exact: true })).toHaveAttribute('title', /skipped/);
   await page.getByRole('button', { name: 'Select SPEC', exact: true }).click();
   await page.getByRole('button', { name: 'Reopen stage', exact: true }).click();
   await page.getByLabel('Rework reason').fill('Acceptance criteria changed');
@@ -124,7 +124,7 @@ test('inline annotations stay revision-bound through revise, reject and approve'
     const result = await client.callTool({ name: 'record_ai_output', arguments: { repoId, ticketId, stageId: 'spec', content } });
     expect(result.isError).not.toBe(true);
     submittedRevision++;
-    await expect(page.getByText('Artifact revision: ' + submittedRevision, { exact: false })).toBeVisible();
+    await expect(page.getByText('Revision ' + submittedRevision, { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
   }
   async function waitDecision(action: string, button: string, revision: number) {
@@ -236,12 +236,21 @@ async function mockDashboard(page: Page) {
   specs[0].updatedAt = '2026-11-01T00:00:00Z';
   specs[1].updatedAt = '2026-11-02T00:00:00Z';
   let settings = { revision: 3, profiles: [{ id: 'repo-only', name: 'Old repository config', agent: 'claude', version: 1, model: '', provider: '', baseUrl: '', credentialEnv: '', command: '', configPath: '' }, { id: 'codex-local', name: 'Local Codex', agent: 'codex', version: 1, model: '', provider: '', baseUrl: '', credentialEnv: '', command: '', configPath: '' }], defaultProfileId: 'codex-local', repoDefaults: { 'ui-repo': 'repo-only' } };
-  const state = { detections: [] as Record<string, unknown>[], existingProfile: false, noDefault: false, detectError: false, resumeBodies: [] as Record<string, unknown>[], createFails: false, saveFails: false, startFails: false, transfers: 0, resumes: 0, creations: [] as Record<string, unknown>[], saved: null as unknown, mode: 'dashboard' };
+  const state = { reviewable: false, detections: [] as Record<string, unknown>[], existingProfile: false, noDefault: false, detectError: false, resumeBodies: [] as Record<string, unknown>[], createFails: false, saveFails: false, startFails: false, transfers: 0, resumes: 0, creations: [] as Record<string, unknown>[], saved: null as unknown, mode: 'dashboard' };
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const body = request.method() === 'GET' ? undefined : request.postDataJSON();
     const reply = (value: unknown, status = 200) => route.fulfill({ status, json: value });
+    if (state.reviewable) {
+      specs[0].stages[0].aiStatus = 'done';
+      specs[0].stages[0].gate.status = 'pending_review';
+      specs[0].stages[0].revision = 1;
+      specs[0].stages[0].artifact = {kind: 'markdown', path: 'spec.md'};
+      specs[0].execution.status = 'waiting_review';
+      specs[0].description = 'Detailed feature requirements.';
+      specs[0].automation = {enabled: true, status: 'waiting_review', attempt: 1, mode: 'dashboard', threadId: 'layout-session', worktreePath: '/tmp/ui-repo/worktree', profile: {id: 'codex-local', name: 'Codex', agent: 'codex', version: 1}};
+    }
     if (state.existingProfile) {
       specs[0].automation = { enabled: false, status: 'paused', attempt: 0, mode: 'ide', profile: { id: 'codex-local', name: 'Original Codex', agent: 'codex', version: 1, model: 'original-model' } };
       settings.profiles[1] = { ...settings.profiles[1], name: 'Changed saved Codex', version: 2, model: 'changed-model' };
@@ -266,6 +275,7 @@ async function mockDashboard(page: Page) {
     }
     if (path.endsWith('/automation/resume')) { state.resumeBodies.push(body); state.resumes++; state.mode = 'dashboard'; return reply(specs[0]); }
     if (path.endsWith('/execution')) return reply({ status: 'ready', actions: [] });
+    if (state.reviewable && path.endsWith('/artifact')) return reply({artifact: specs[0].stages[0].artifact, revision: 1, content: '# Shipping specification\n\n' + Array.from({length: 40}, (_, i) => '## Requirement ' + (i + 1) + '\n\nCalculate shipping in integer cents. Preserve member and regular order thresholds.\n\n').join('')});
     if (path.endsWith('/artifact')) return reply({ error: 'No artifact' }, 404);
     if (path === '/api/repos/ui-repo/specs') {
       if (request.method() === 'POST') {
@@ -539,4 +549,33 @@ test('only User default selects configuration in settings, creation and manual e
   await create.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('link', { name: /UI-2/ }).click();
   await expect(page.getByLabel('Execution configuration')).toHaveValue('codex-local');
+});
+
+
+test('ticket detail gives the artifact most of the viewport and handoff does not cover scrolling text', async ({ page }) => {
+  await page.setViewportSize({width: 1280, height: 720});
+  const state = await mockDashboard(page);
+  state.reviewable = true;
+  await page.goto('/repos/ui-repo/specs/UI-2');
+  const heading = page.getByRole('heading', {name: 'Shipping specification', exact: true});
+  await expect(heading).toBeVisible();
+  const box = await heading.boundingBox();
+  expect(box!.y).toBeLessThan(720 * 0.45);
+  await expect(page.getByText('Agent session: layout-session', {exact: true})).not.toBeVisible();
+  await expect(page.getByRole('button', {name: 'Approve', exact: true})).toBeVisible();
+  const content = page.getByRole('region', {name: 'Stage content', exact: true});
+  expect((await content.boundingBox())!.height).toBeGreaterThan(720 * 0.55);
+  await page.screenshot({path: '/private/tmp/ai-pilot-detail-compact.png'});
+  await content.evaluate((element) => { element.scrollTop = 500; });
+  await expect(page.getByRole('button', {name: 'Copy context', exact: true})).not.toBeInViewport();
+  await expect(page.getByRole('button', {name: 'Approve', exact: true})).toBeInViewport();
+  await page.getByRole('button', {name: 'Execution details', exact: true}).click();
+  await expect(page.getByText('Agent session: layout-session', {exact: true})).toBeVisible();
+  await expect(page.getByText('Configuration: Codex · Local current model', {exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Execution details', exact: true}).click();
+  await page.getByRole('button', {name: 'Select DESIGN', exact: true}).click();
+  await expect(page).toHaveURL(/stage=design/);
+  expect(await content.evaluate((element) => element.scrollTop)).toBe(0);
+  await page.setViewportSize({width: 768, height: 720});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(768);
 });
