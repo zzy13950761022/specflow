@@ -299,7 +299,9 @@ Use `--no-runner` for a review-only Dashboard. `--runner` remains accepted
 for existing launch commands. In the header, open **Agent settings** next to
 **Add repo**, add an execution configuration, and choose Codex, Claude Code or
 OpenCode. Configuration names default to the Agent name; a custom name is optional
-under **Advanced settings**. User and repository defaults select a saved configuration.
+under **Advanced settings**. **User default** selects one saved configuration for
+all repositories. Existing tickets retain their selected configuration; an explicit
+ticket selection overrides the default.
 
 Local configuration is read automatically. **Model** defaults to **Use local
 current model**; searchable choices come from models declared in native settings

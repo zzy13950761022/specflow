@@ -36,7 +36,7 @@ export function registerWorkflowRoutes(server: FastifyInstance, app: AppCore, ru
     if (body.enabled && !runnerEnabled) throw new Error('Restart Dashboard without --no-runner before enabling automatic execution.');
     if (!body.enabled) { await app.handoffToIde(p.repoId, p.ticketId); return app.getSpec(p.repoId, p.ticketId); }
     const current = await app.getSpec(p.repoId, p.ticketId);
-    const profile = body.enabled && (body.profileId || !current?.automation?.profile) ? await app.agentSettings.resolve(p.repoId, body.profileId) : undefined;
+    const profile = body.enabled && (body.profileId || !current?.automation?.profile) ? await app.agentSettings.resolve(body.profileId) : undefined;
     return app.configureAutomation(p.repoId, p.ticketId, body.enabled, profile);
   });
   server.get<{ Params: TicketParams }>(prefix + '/handoff', async (request, reply) => {

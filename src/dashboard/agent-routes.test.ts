@@ -20,7 +20,7 @@ it('requires a browser session for settings and snapshots selected profiles on c
     const headers = { 'x-specflow-review-session': session.json().token };
     const configPath = join(root, 'native.json'); await fs.writeFile(configPath, '{}');
     const command = join(root, 'claude'); await fs.writeFile(command, '#!/bin/sh\necho claude-test\n', { mode: 0o755 });
-    const settings = { revision: 0, profiles: [{ id: 'p', name: 'My Claude', agent: 'claude', version: 1, model: 'hyperspace-model', configPath, command }], defaultProfileId: 'p', repoDefaults: {} };
+    const settings = { revision: 0, profiles: [{ id: 'p', name: 'My Claude', agent: 'claude', version: 1, model: 'hyperspace-model', configPath, command }], defaultProfileId: 'p' };
     expect((await server.inject({ method: 'PUT', url: '/api/agents/settings', headers, payload: settings })).statusCode).toBe(200);
     const created = await server.inject({ method: 'POST', url: '/api/repos/' + repo.id + '/specs', headers, payload: { ticketId: 'A-1', title: 'Feature', description: 'Acceptance context', autoRun: true } });
     expect(created.statusCode).toBe(200);

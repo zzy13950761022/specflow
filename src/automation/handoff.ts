@@ -62,7 +62,7 @@ export async function resumeAutomation(app: AppCore, repoId: string, ticketId: s
   if (spec.stages.some(stage => stage.subtasks?.some(task => task.status === 'running'))) throw new Error('Finish or release active IDE task claims before resuming Dashboard.');
   if (ownerAlive(spec) || processGroupAlive(spec.automation?.runnerPid)) throw new Error('Previous Agent is still running.');
   if (spec.execution.status === 'completed') throw new Error('This workflow is already completed.');
-  const profile = profileId ? await app.agentSettings.resolve(repoId, profileId) : spec.automation?.profile ?? await app.agentSettings.resolve(repoId);
+  const profile = profileId ? await app.agentSettings.resolve(profileId) : spec.automation?.profile ?? await app.agentSettings.resolve();
   // Keep automation disabled during recovery; enabling is the final operation.
   if (spec.automation?.enabled) await app.configureAutomation(repoId, ticketId, false);
   await app.resumeExecution(repoId, ticketId);

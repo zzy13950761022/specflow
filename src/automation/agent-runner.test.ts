@@ -29,7 +29,7 @@ for (const agent of ['claude', 'opencode'] as const) it(agent + ' creates, revis
   await fs.writeFile(command, '#!' + process.execPath + String.fromCharCode(10) + code, { mode: 0o700 });
   const configPath = join(root, 'native.json'); await fs.writeFile(configPath, '{}');
   const app = new AppCore(); const id = (await app.addRepo(repo)).id;
-  await app.agentSettings.save({ revision: 0, profiles: [{ id: 'p', name: 'Test', agent, command, configPath, model: agent === 'opencode' ? 'hyperspace/test' : 'test' }], defaultProfileId: 'p', repoDefaults: {} });
+  await app.agentSettings.save({ revision: 0, profiles: [{ id: 'p', name: 'Test', agent, command, configPath, model: agent === 'opencode' ? 'hyperspace/test' : 'test' }], defaultProfileId: 'p' });
   const service = new Orchestrator(app, createCodexExecutor(app));
   const wait = async (predicate: () => Promise<boolean>) => {
     for (let i = 0; i < 300; i++) { if (await predicate()) return; const state = await app.getSpec(id, 'N-1'); if (state?.automation?.status === 'failed') throw new Error(state.automation.error); await new Promise(resolve => setTimeout(resolve, 10)); }

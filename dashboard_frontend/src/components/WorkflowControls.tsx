@@ -11,7 +11,7 @@ export function WorkflowControls({ repoId, spec, stage, onDone, profileId, onPro
   const [next, setNext] = useState<string | null>(null);
   const [runnerAvailable, setRunnerAvailable] = useState(false);
   const [settings, setSettings] = useState<AgentSettings | null>(null);
-  useEffect(() => { let alive = true; api.agentSettings().then((value) => { if (alive) { setSettings(value); onProfileChange(spec.automation?.profile ? '' : value.repoDefaults[repoId] ?? value.defaultProfileId ?? ''); } }).catch((e) => { if (alive) setError(e.message); }); return () => { alive = false; }; }, [repoId, spec.ticketId, spec.automation?.profile?.id, spec.automation?.profile?.version, onProfileChange]);
+  useEffect(() => { let alive = true; api.agentSettings().then((value) => { if (alive) { setSettings(value); onProfileChange(spec.automation?.profile ? '' : value.defaultProfileId ?? ''); } }).catch((e) => { if (alive) setError(e.message); }); return () => { alive = false; }; }, [repoId, spec.ticketId, spec.automation?.profile?.id, spec.automation?.profile?.version, onProfileChange]);
   useEffect(() => { let alive = true; api.automationAvailable().then((value) => { if (alive) setRunnerAvailable(value.available); }).catch(() => {}); return () => { alive = false; }; }, []);
   useEffect(() => {
     let alive = true;

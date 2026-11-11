@@ -43,9 +43,9 @@ export class AgentSettingsStore {
       return next;
     } finally { await lock.close(); await fs.unlink(lockPath); await fs.unlink(temporary).catch(() => {}); }
   }
-  async resolve(repoId: string, profileId?: string): Promise<AgentProfile> {
+  async resolve(profileId?: string): Promise<AgentProfile> {
     const settings = await this.load();
-    const id = profileId ?? settings.repoDefaults[repoId] ?? settings.defaultProfileId;
+    const id = profileId ?? settings.defaultProfileId;
     const profile = settings.profiles.find(item => item.id === id);
     if (!profile) throw new Error('Choose an Agent profile in Settings before starting automatic execution.');
     return structuredClone(profile);

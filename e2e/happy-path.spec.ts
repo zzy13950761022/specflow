@@ -235,7 +235,7 @@ async function mockDashboard(page: Page) {
   ];
   specs[0].updatedAt = '2026-11-01T00:00:00Z';
   specs[1].updatedAt = '2026-11-02T00:00:00Z';
-  let settings = { revision: 3, profiles: [{ id: 'codex-local', name: 'Local Codex', agent: 'codex', version: 1, model: '', provider: '', baseUrl: '', credentialEnv: '', command: '', configPath: '' }], defaultProfileId: 'codex-local', repoDefaults: { 'ui-repo': 'codex-local' } };
+  let settings = { revision: 3, profiles: [{ id: 'repo-only', name: 'Old repository config', agent: 'claude', version: 1, model: '', provider: '', baseUrl: '', credentialEnv: '', command: '', configPath: '' }, { id: 'codex-local', name: 'Local Codex', agent: 'codex', version: 1, model: '', provider: '', baseUrl: '', credentialEnv: '', command: '', configPath: '' }], defaultProfileId: 'codex-local', repoDefaults: { 'ui-repo': 'repo-only' } };
   const state = { detections: [] as Record<string, unknown>[], existingProfile: false, noDefault: false, detectError: false, resumeBodies: [] as Record<string, unknown>[], createFails: false, saveFails: false, startFails: false, transfers: 0, resumes: 0, creations: [] as Record<string, unknown>[], saved: null as unknown, mode: 'dashboard' };
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -244,7 +244,7 @@ async function mockDashboard(page: Page) {
     const reply = (value: unknown, status = 200) => route.fulfill({ status, json: value });
     if (state.existingProfile) {
       specs[0].automation = { enabled: false, status: 'paused', attempt: 0, mode: 'ide', profile: { id: 'codex-local', name: 'Original Codex', agent: 'codex', version: 1, model: 'original-model' } };
-      settings.profiles[0] = { ...settings.profiles[0], name: 'Changed saved Codex', version: 2, model: 'changed-model' };
+      settings.profiles[1] = { ...settings.profiles[1], name: 'Changed saved Codex', version: 2, model: 'changed-model' };
     }
     if (path === '/api/review-session') return reply({ token: 'ui-review-token' });
     if (path.startsWith('/api/agents/') || path.endsWith('/handoff') || request.method() !== 'GET') expect(request.headers()['x-specflow-review-session']).toBe('ui-review-token');
@@ -355,7 +355,6 @@ test('agent settings detects configuration and retains edits after revision conf
   await dialog.getByRole('button', { name: 'Test connection' }).click();
   await expect(dialog.getByText(/Credentials: failed/)).toBeVisible();
   await dialog.getByLabel('User default').selectOption({ label: 'Hyperspace Claude · Claude Code · Local current model' });
-  await dialog.getByLabel(/Repository default/).selectOption({ label: 'Hyperspace Claude · Claude Code · Local current model' });
   state.saveFails = true;
   await dialog.getByRole('button', { name: 'Save settings' }).click();
   await expect(dialog.getByRole('alert')).toContainText('Settings changed elsewhere');
@@ -522,4 +521,22 @@ test('late native detection cannot overwrite a different Agent selection', async
   await dialog.getByRole('button', { name: 'Save settings', exact: true }).click();
   await expect(dialog.getByText('Current: claude-current', { exact: true })).toBeVisible();
   await expect(dialog.getByLabel('Installation', { exact: true })).toHaveValue('/tmp/claude');
+});
+
+
+test('only User default selects configuration in settings, creation and manual execution', async ({ page }) => {
+  await mockDashboard(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Agent settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Agent settings' });
+  await expect(settings.getByLabel('User default')).toBeVisible();
+  await expect(settings.getByLabel(/Repository default/)).toHaveCount(0);
+  await expect(settings.getByLabel('Edit configuration')).toHaveValue('codex-local');
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
+  const create = page.getByRole('dialog', { name: 'Create Spec' });
+  await expect(create.getByLabel('Execution configuration')).toHaveValue('codex-local');
+  await create.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('link', { name: /UI-2/ }).click();
+  await expect(page.getByLabel('Execution configuration')).toHaveValue('codex-local');
 });

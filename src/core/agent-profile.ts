@@ -20,12 +20,11 @@ export const AgentSettingsSchema = z.object({
   revision: z.number().int().nonnegative().default(0),
   profiles: z.array(AgentProfileSchema).max(30).default([]),
   defaultProfileId: z.string().optional(),
-  repoDefaults: z.record(z.string()).default({}),
-}).strict().superRefine((settings, context) => {
+  // Read older settings without retaining repository-specific defaults.
+  repoDefaults: z.record(z.string()).optional(),
+}).strict().transform(({ repoDefaults: _legacy, ...settings }) => settings).superRefine((settings, context) => {
   const ids = new Set(settings.profiles.map(profile => profile.id));
   if (ids.size !== settings.profiles.length) context.addIssue({ code: 'custom', message: 'Profile IDs must be unique.' });
-  for (const id of [settings.defaultProfileId, ...Object.values(settings.repoDefaults)]) {
-    if (id && !ids.has(id)) context.addIssue({ code: 'custom', message: 'Default profile does not exist: ' + id });
-  }
+  if (settings.defaultProfileId && !ids.has(settings.defaultProfileId)) context.addIssue({ code: 'custom', message: 'Default profile does not exist: ' + settings.defaultProfileId });
 });
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>;

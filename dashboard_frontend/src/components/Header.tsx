@@ -117,7 +117,7 @@ export function Header({
         <button aria-label="Agent settings" title="Agent settings" onClick={() => setShowSettings(true)} className="rounded-lg border border-blue-200 px-3 py-1.5 text-blue-700 hover:bg-blue-50">⚙</button>
         {!showAdd && <button onClick={() => setShowAdd(true)} className="text-[11px] text-slate-500 hover:text-gray-800">or path</button>}
       </div>
-      {showSettings && <AgentSettingsDialog repoId={activeRepo} repoName={active?.name} onClose={() => setShowSettings(false)} />}
+      {showSettings && <AgentSettingsDialog onClose={() => setShowSettings(false)} />}
     </header>
   );
 }

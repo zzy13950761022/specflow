@@ -132,7 +132,7 @@ export async function buildDashboard(app: AppCore, options: DashboardOptions = {
       const { ticketId, title, ...options } = input.data;
       if (options.autoRun && !runnerEnabled) return reply.code(400).send({ error: 'The Dashboard Agent runner is disabled. Restart without --no-runner.' });
       try {
-        if (options.autoRun) options.agentProfileId = (await app.agentSettings.resolve(req.params.repoId, options.agentProfileId)).id;
+        if (options.autoRun) options.agentProfileId = (await app.agentSettings.resolve(options.agentProfileId)).id;
         return await app.createSpec(req.params.repoId, ticketId, title, options);
       } catch (e) {
         return reply.code(400).send({ error: String((e as Error).message) });

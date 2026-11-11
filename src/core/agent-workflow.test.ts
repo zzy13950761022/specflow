@@ -9,7 +9,7 @@ const oldHome = process.env.AI_PILOT_HOME;
 beforeEach(async () => { root = await fs.mkdtemp(join(tmpdir(), 'agent-flow-')); process.env.AI_PILOT_HOME = join(root, 'home'); app = new AppCore(); repoId = (await app.addRepo(root)).id; });
 afterEach(async () => { if (oldHome === undefined) delete process.env.AI_PILOT_HOME; else process.env.AI_PILOT_HOME = oldHome; await fs.rm(root, { recursive: true, force: true }); });
 it('snapshots the selected profile at creation and includes the brief in stage prompts', async () => {
-  await app.agentSettings.save({ revision: 0, profiles: [{ id: 'p', name: 'Personal', agent: 'claude', version: 1, model: 'my-model' }], defaultProfileId: 'p', repoDefaults: {} });
+  await app.agentSettings.save({ revision: 0, profiles: [{ id: 'p', name: 'Personal', agent: 'claude', version: 1, model: 'my-model' }], defaultProfileId: 'p' });
   const spec = await app.createSpec(repoId, 'T-1', 'Feature', { autoRun: true, agentProfileId: 'p', description: 'Support the desired customer workflow.' });
   expect(spec.automation?.profile?.agent).toBe('claude');
   expect(spec.description).toContain('customer');

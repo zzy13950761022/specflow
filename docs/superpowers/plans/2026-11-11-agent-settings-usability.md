@@ -51,3 +51,12 @@ Node runtime: /Users/I605217/.nvm/versions/node/v22.17.1/bin. Baseline f7c7b6a w
 - Spec review and code quality review passed after fixing custom OpenCode provider transitions, explicit executable pinning, and AI_PILOT_CODEX_BIN precedence.
 - Real local detection succeeded for Codex, Claude Code and OpenCode. Their native configuration exposed 1, 4 and 49 model choices respectively. OpenCode version probing needed normal permissions because the CLI writes its user log even for --version. No new model requests were made.
 - Original main checkout is unchanged. Existing Dashboard process still needs a restart to load the updated backend; use its original terminal to preserve environment/credentials.
+
+
+## Approved follow-up: one user default
+
+User requested removing repository defaults entirely from the product. Settings, creation and manual execution now select only defaultProfileId, unless the user explicitly selects a configuration. Existing ticket snapshots stay unchanged. The settings schema accepts the legacy repoDefaults field solely to discard it, allowing old files to load and removing it on the next save. Removed repository parameters from the settings dialog and profile resolver.
+
+Regression coverage checks legacy mapping removal (including orphaned references), explicit selection, no accidental promotion of a repository default, and consistent browser selection despite a conflicting legacy mapping.
+
+Follow-up verification: build and frontend TypeScript passed; 301 backend, 32 frontend and 14 browser tests passed. Diff review confirmed repository lookup still retains repoId; only configuration resolution is global.

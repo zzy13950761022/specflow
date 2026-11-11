@@ -26,7 +26,7 @@ export function NewSpec({ repos, activeRepo, onClose, onCreate }: {
     api.agentSettings().then((value) => { if (alive) setSettings(value); }).catch((e) => { if (alive) setSettingsError(e.message); });
     return () => { alive = false; };
   }, []);
-  useEffect(() => { if (settings) setProfileId(settings.repoDefaults[repoId] ?? settings.defaultProfileId ?? ''); }, [repoId, settings]);
+  useEffect(() => { if (settings) setProfileId(settings.defaultProfileId ?? ''); }, [repoId, settings]);
   const selectedProfile = settings?.profiles.find((profile) => profile.id === profileId);
   async function create(event: React.FormEvent) {
     event.preventDefault();

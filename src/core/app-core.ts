@@ -82,7 +82,7 @@ export class AppCore {
 
   async createSpec(repoId: string, ticketId: string, title: string, options: WorkflowOptions = {}): Promise<SpecFile> {
     const path = await this.repoPath(repoId);
-    const profile = options.autoRun && options.agentProfileId ? await pinProfile(await this.agentSettings.resolve(repoId, options.agentProfileId)) : undefined;
+    const profile = options.autoRun && options.agentProfileId ? await pinProfile(await this.agentSettings.resolve(options.agentProfileId)) : undefined;
     const saved = await this.store.transaction(path, ticketId, async (existing) => {
       if (existing) throw new Error(`Spec already exists: ${ticketId}`);
       const spec = this.stageMachine.createSpec({ ticketId, title, ...options });

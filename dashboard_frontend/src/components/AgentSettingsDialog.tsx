@@ -13,7 +13,7 @@ const advancedFields = [
 ] as const;
 const modelExamples = { codex: 'e.g. gpt-6.1-sol', claude: 'e.g. sonnet', opencode: 'e.g. provider/model-id' };
 
-export function AgentSettingsDialog({ repoId, repoName, onClose }: { repoId: string | null; repoName?: string; onClose: () => void }) {
+export function AgentSettingsDialog({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<AgentSettings | null>(null);
   const [profileId, setProfileId] = useState('');
   const [busy, setBusy] = useState(false);
@@ -28,10 +28,10 @@ export function AgentSettingsDialog({ repoId, repoName, onClose }: { repoId: str
   useEffect(() => {
     let alive = true;
     api.agentSettings().then((value) => {
-      if (alive) { setSettings(value); setProfileId(value.repoDefaults[repoId ?? ''] ?? value.defaultProfileId ?? value.profiles[0]?.id ?? ''); }
+      if (alive) { setSettings(value); setProfileId(value.defaultProfileId ?? value.profiles[0]?.id ?? ''); }
     }).catch((e) => { if (alive) setError(e.message); });
     return () => { alive = false; };
-  }, [repoId]);
+  }, []);
 
   const profile = settings?.profiles.find((item) => item.id === profileId);
   const lookupKey = JSON.stringify([profileId, profile?.agent, profile?.command || undefined, profile?.configPath || undefined, refresh]);
@@ -142,9 +142,8 @@ export function AgentSettingsDialog({ repoId, repoName, onClose }: { repoId: str
                 setMessage(result.ok ? 'Connection checks passed.' : 'Connection checks failed. Review the results below.');
               })} className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700 disabled:opacity-50">Test connection</button></div>
             </>}
-            <div className="grid sm:grid-cols-2 gap-4 border-t border-blue-100 pt-4">
+            <div className="border-t border-blue-100 pt-4">
               <label className="field">User default<select aria-label="User default" value={settings.defaultProfileId ?? ''} onChange={(e) => setSettings({ ...settings, defaultProfileId: e.target.value || undefined })}><option value="">No default</option>{settings.profiles.map((item) => <option key={item.id} value={item.id}>{configurationLabel(item)}</option>)}</select></label>
-              {repoId && <label className="field">Repository default ({repoName ?? repoId})<select aria-label="Repository default" value={settings.repoDefaults[repoId] ?? ''} onChange={(e) => { const defaults = { ...settings.repoDefaults }; if (e.target.value) defaults[repoId] = e.target.value; else delete defaults[repoId]; setSettings({ ...settings, repoDefaults: defaults }); }}><option value="">Use user default</option>{settings.profiles.map((item) => <option key={item.id} value={item.id}>{configurationLabel(item)}</option>)}</select></label>}
             </div>
           </>}
           {checks.length > 0 && <ul className="text-sm space-y-2">{checks.map((check, index) => <li key={index} className={check.status === 'failed' ? 'text-red-600' : 'text-slate-600'}><strong>{check.name}: {check.status}</strong> — {check.message}</li>)}</ul>}
