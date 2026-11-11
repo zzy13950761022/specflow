@@ -331,13 +331,19 @@ protocol. Copy only the selected provider's transport, not native hooks, plugins
 MCP servers or command approval preferences. OpenCode configuration compatibility
 is checked against its [official schema](https://opencode.ai/config.json).
 
-**Create Spec** opens a modal containing repository, ticket, title, description,
-workflow, risk and execution settings. Choose **Run in Dashboard**, select a saved
-execution configuration and click **Create & Start**. Creation persists the ticket before the
-runner starts; launch failures remain on the ticket with a Retry action. Manual
-creation stays available without any Agent configuration. The board searches
-ticket IDs/titles, filters state/stage/workflow and sorts results; URL query
-parameters preserve filters when returning from a detail page.
+**Create Spec** asks for repository, ticket ID, description, workflow and execution
+configuration (preselected from **User default**). The first description line
+becomes the title, capped at 120 characters. Dashboard creation always uses normal
+risk and starts the selected Agent, with automatic check approval disabled.
+Click **Create & Start**; launch failures remain on the persisted ticket with a
+Retry action. A description and saved execution configuration are required.
+
+Jira MCP is not connected yet: ticket IDs alone do not retrieve Jira details.
+Enter the requirements and acceptance criteria in Description for now. Automatic Jira import is a follow-up integration once a Jira MCP
+connection is available.
+IDE handoff remains available at every stage, typically when development starts.
+Manual ticket creation through MCP remains supported. The board searches ticket
+IDs/titles, filters state/stage/workflow and preserves filters in the URL.
 
 Each managed ticket snapshots its selected profile and keeps a native session ID.
 Approval, revision and rejection persist the human decision before waking the

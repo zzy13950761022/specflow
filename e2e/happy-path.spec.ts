@@ -55,7 +55,7 @@ async function mcpClient(): Promise<Client> {
   return client;
 }
 
-test('happy path: add repo, create spec, Claude records output, human approves, advances', async ({
+test('happy path: add repo, MCP creates spec, human approves, advances', async ({
   page,
 }) => {
   await page.goto('/');
@@ -68,19 +68,14 @@ test('happy path: add repo, create spec, Claude records output, human approves, 
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.getByText(repo, { exact: false })).toBeVisible();
 
-  // Create a spec via the accessible dialog.
-  await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
-  await page.getByPlaceholder('TICKET-123').fill('E2E-1');
-  await page.getByPlaceholder('Feature title').fill('Checkout Tax');
-  await page.getByLabel('Workflow type').selectOption('bugfix');
-  await page.getByRole('dialog', { name: 'Create Spec' }).getByRole('button', { name: 'Create Spec', exact: true }).click();
-  await expect(page.getByText('E2E-1').first()).toBeVisible();
-
-  // "Claude" records the stage-0 output over MCP; the board must update live.
+  // Manual IDE workflows enter through MCP; Dashboard creation now always starts an Agent.
   const repos = await (await fetch(`http://127.0.0.1:${PORT}/api/repos`)).json();
   const repoId = repos[0].id;
   const claude = await mcpClient();
   try {
+    const created = await claude.callTool({ name: 'create_spec', arguments: { repoId, ticketId: 'E2E-1', title: 'Checkout Tax', workflowKind: 'bugfix' } });
+    expect(created.isError).not.toBe(true);
+    await page.getByRole('link', { name: /E2E-1/ }).click();
     await claude.callTool({
       name: 'record_ai_output',
       arguments: { repoId, ticketId: 'E2E-1', stageId: 'spec', content: '# The spec' },
@@ -236,7 +231,7 @@ async function mockDashboard(page: Page) {
   specs[0].updatedAt = '2026-11-01T00:00:00Z';
   specs[1].updatedAt = '2026-11-02T00:00:00Z';
   let settings = { revision: 3, profiles: [{ id: 'repo-only', name: 'Old repository config', agent: 'claude', version: 1, model: '', provider: '', baseUrl: '', credentialEnv: '', command: '', configPath: '' }, { id: 'codex-local', name: 'Local Codex', agent: 'codex', version: 1, model: '', provider: '', baseUrl: '', credentialEnv: '', command: '', configPath: '' }], defaultProfileId: 'codex-local', repoDefaults: { 'ui-repo': 'repo-only' } };
-  const state = { reviewable: false, detections: [] as Record<string, unknown>[], existingProfile: false, noDefault: false, detectError: false, resumeBodies: [] as Record<string, unknown>[], createFails: false, saveFails: false, startFails: false, transfers: 0, resumes: 0, creations: [] as Record<string, unknown>[], saved: null as unknown, mode: 'dashboard' };
+  const state = { noProfiles: false, reviewable: false, detections: [] as Record<string, unknown>[], existingProfile: false, noDefault: false, detectError: false, resumeBodies: [] as Record<string, unknown>[], createFails: false, saveFails: false, startFails: false, transfers: 0, resumes: 0, creations: [] as Record<string, unknown>[], saved: null as unknown, mode: 'dashboard' };
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -265,6 +260,7 @@ async function mockDashboard(page: Page) {
         if (state.saveFails) return reply({ error: 'Settings changed elsewhere. Reopen settings and try again.' }, 409);
         settings = { ...body, revision: body.revision + 1 };
       }
+      if (state.noProfiles) return reply({ revision: settings.revision, profiles: [] });
       return reply(state.noDefault ? { ...settings, defaultProfileId: undefined, repoDefaults: {}, profiles: [...settings.profiles, { id: 'claude-explicit', name: 'Explicit Claude', agent: 'claude', version: 1 }] } : settings);
     }
     if (path === '/api/agents/detect') { state.detections.push(body); return reply({ command: '/tmp/working-' + body.agent, installations: [{command: '/tmp/working-' + body.agent, label: 'VS Code extension', version: '1.2.3'}], models: [{id: 'detected-model', label: 'Current model', provider: 'hyperspace'}, {id: body.agent === 'opencode' ? 'other-provider/other-model' : 'other-model', label: 'Other model', provider: 'other-provider'}], error: state.detectError ? 'Cannot read agent configuration' : undefined, available: true, version: '1.2.3', configPath: '/tmp/agent-config', model: 'detected-model', provider: 'hyperspace', credentialEnv: 'HYPERSPACE_API_KEY' }); }
@@ -333,9 +329,7 @@ test('create dialog retains failed form, traps focus, and shows start failure on
   await expect(trigger).toBeFocused();
   await trigger.click();
   await dialog.getByLabel('Ticket ID').fill('UI-NEW');
-  await dialog.getByLabel('Title', { exact: true }).fill('Create robust flow');
   await dialog.getByLabel('Description').fill('Keep the acceptance criteria after errors.');
-  await dialog.getByLabel('Execution', { exact: true }).selectOption('dashboard');
   await expect(dialog.getByLabel('Execution configuration')).toHaveValue('codex-local');
   await dialog.getByRole('button', { name: 'Create & Start' }).click();
   await expect(dialog.getByRole('alert')).toHaveText('Could not persist spec');
@@ -578,4 +572,37 @@ test('ticket detail gives the artifact most of the viewport and handoff does not
   expect(await content.evaluate((element) => element.scrollTop)).toBe(0);
   await page.setViewportSize({width: 768, height: 720});
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(768);
+});
+
+
+test('Create Spec only asks for ticket requirements and starts Dashboard with normal risk', async ({ page }) => {
+  const state = await mockDashboard(page);
+  await page.goto('/');
+  await page.getByRole('button', {name: 'Create Spec', exact: true}).click();
+  const dialog = page.getByRole('dialog', {name: 'Create Spec'});
+  await expect(dialog.getByLabel('Execution configuration')).toHaveValue('codex-local');
+  await expect(dialog.getByLabel('Title', {exact: true})).toHaveCount(0);
+  await expect(dialog.getByLabel('Change risk', {exact: true})).toHaveCount(0);
+  await expect(dialog.getByLabel('Execution', {exact: true})).toHaveCount(0);
+  await dialog.getByLabel('Ticket ID').fill('SIMPLE-1');
+  await expect(dialog.getByRole('button', {name: 'Create & Start', exact: true})).toBeDisabled();
+  await dialog.getByLabel('Description').fill('# Calculate shipping\n\nAmounts are integer cents.');
+  await page.screenshot({path: '/private/tmp/ai-pilot-create-simple.png'});
+  await dialog.getByRole('button', {name: 'Create & Start', exact: true}).click();
+  await expect.poll(() => state.creations.length).toBe(1);
+  expect(state.creations[0]).toMatchObject({ticketId: 'SIMPLE-1', title: 'Calculate shipping', description: '# Calculate shipping\n\nAmounts are integer cents.', risk: 'normal', autoRun: true, autoChecks: false, agentProfileId: 'codex-local'});
+  await expect(page).toHaveURL(/specs\/SIMPLE-1/);
+});
+
+test('Create Spec requires an execution configuration instead of silently creating an IDE ticket', async ({ page }) => {
+  const state = await mockDashboard(page);
+  state.noProfiles = true;
+  await page.goto('/');
+  await page.getByRole('button', {name: 'Create Spec', exact: true}).click();
+  const dialog = page.getByRole('dialog', {name: 'Create Spec'});
+  await dialog.getByLabel('Ticket ID').fill('SIMPLE-2');
+  await dialog.getByLabel('Description').fill('Calculate shipping');
+  await expect(dialog.getByRole('button', {name: 'Create & Start', exact: true})).toBeDisabled();
+  await expect(dialog.getByText(/Add configurations in Agent settings/)).toBeVisible();
+  expect(state.creations).toHaveLength(0);
 });
