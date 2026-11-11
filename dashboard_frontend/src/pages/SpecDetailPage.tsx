@@ -6,6 +6,7 @@ import { StageTimeline } from '../components/StageTimeline';
 import { StagePanel } from '../components/StagePanel';
 import { WorkflowControls } from '../components/WorkflowControls';
 import { useAppState } from '../context/AppContext';
+import { readBoardFilters, writeBoardFilters } from '../lib/board';
 import { currentStageId, GATE_STYLES } from '../lib/stage';
 import { STAGE_IDS, type InlineAnnotation, type SpecFile, type StageId } from '../types';
 
@@ -14,6 +15,7 @@ export function SpecDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { specs, activeRepo, setActiveRepo, refreshSpecs } = useAppState();
 
+  const [agentProfileId, setAgentProfileId] = useState('');
   const [coldSpec, setColdSpec] = useState<SpecFile | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [review, setReview] = useState<{ stageId: StageId; revision: number } | null>(null);
@@ -27,7 +29,7 @@ export function SpecDetailPage() {
 
   // Prefer the live spec from context; fall back to a cold fetch on deep link /
   // hard reload where the context list for this repo hasn't arrived yet.
-  const liveSpec = specs.find((s) => s.ticketId === ticketId) ?? null;
+  const liveSpec = (activeRepo === repoId ? specs : []).find((s) => s.ticketId === ticketId) ?? null;
   const spec = liveSpec ?? coldSpec;
 
   useEffect(() => {
@@ -49,7 +51,9 @@ export function SpecDetailPage() {
         : currentStageId(spec))
     : null;
 
-  const selectStage = (id: StageId) => setSearchParams({ stage: id }, { replace: true });
+  const boardSearch = writeBoardFilters(readBoardFilters(searchParams)).toString();
+  const boardPath = '/' + (boardSearch ? '?' + boardSearch : '');
+  const selectStage = (id: StageId) => { const next = new URLSearchParams(searchParams); next.set('stage', id); setSearchParams(next, { replace: true }); };
 
   // Scroll the panel into view when the selected stage changes.
   useEffect(() => {
@@ -80,7 +84,7 @@ export function SpecDetailPage() {
   if (loadErr) {
     return (
       <div className="glass rounded-2xl flex-1 grid place-items-center text-red-300 text-sm">
-        {loadErr} — <Link to="/" className="underline ml-1">back to board</Link>
+        {loadErr} — <Link to={boardPath} className="underline ml-1">back to board</Link>
       </div>
     );
   }
@@ -100,7 +104,7 @@ export function SpecDetailPage() {
       {/* top: back link + title */}
       <div className="flex items-center gap-3 shrink-0">
         <Link
-          to="/"
+          to={boardPath}
           className="text-sm text-slate-500 hover:text-gray-800 rounded-lg px-2 py-1 bg-blue-50"
         >
           ← Board
@@ -112,7 +116,8 @@ export function SpecDetailPage() {
       </div>
 
       {/* top: timeline */}
-      <WorkflowControls repoId={repoId} spec={spec} stage={selectedStage} onDone={() => refreshSpecs(repoId)} />
+      {spec.description && <details className="text-sm text-slate-600"><summary className="cursor-pointer">Description</summary><p className="mt-2 whitespace-pre-wrap">{spec.description}</p></details>}
+      <WorkflowControls profileId={agentProfileId} onProfileChange={setAgentProfileId} repoId={repoId} spec={spec} stage={selectedStage} onDone={() => refreshSpecs(repoId)} />
       <div className="glass rounded-2xl px-4 py-3 shrink-0">
         <StageTimeline
           spec={spec}
@@ -127,6 +132,8 @@ export function SpecDetailPage() {
         <StagePanel
           key={repoId + ":" + ticketId + ":" + selectedStage.id + ":" + selectedStage.revision}
           onReviewReady={setReview}
+          agentProfileId={agentProfileId}
+          onDone={() => refreshSpecs(repoId)}
           repoId={repoId}
           ticketId={ticketId}
           stage={selectedStage}

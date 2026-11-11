@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AgentSettingsDialog } from './AgentSettingsDialog';
 import type { RepoEntry } from '../types';
 
 export function Header({
@@ -15,6 +16,7 @@ export function Header({
   onAdd: (path: string) => void;
   onBrowse: () => Promise<void>;
 }) {
+  const [showSettings, setShowSettings] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [path, setPath] = useState('');
   const [browsing, setBrowsing] = useState(false);
@@ -110,15 +112,12 @@ export function Header({
               <FolderIcon />
               {browsing ? 'Opening…' : 'Add repo'}
             </button>
-            <button
-              onClick={() => setShowAdd(true)}
-              className="text-[11px] text-slate-500 hover:text-gray-800"
-            >
-              or path
-            </button>
           </>
         )}
+        <button aria-label="Agent settings" title="Agent settings" onClick={() => setShowSettings(true)} className="rounded-lg border border-blue-200 px-3 py-1.5 text-blue-700 hover:bg-blue-50">⚙</button>
+        {!showAdd && <button onClick={() => setShowAdd(true)} className="text-[11px] text-slate-500 hover:text-gray-800">or path</button>}
       </div>
+      {showSettings && <AgentSettingsDialog repoId={activeRepo} repoName={active?.name} onClose={() => setShowSettings(false)} />}
     </header>
   );
 }

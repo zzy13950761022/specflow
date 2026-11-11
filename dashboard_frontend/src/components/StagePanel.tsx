@@ -18,6 +18,7 @@ import { DeployChecklistView } from './DeployChecklistView';
 import { DevelopSubtasks } from './DevelopSubtasks';
 import { OpsReportView } from './OpsReportView';
 import { RequirementsView } from './RequirementsView';
+import { IdeHandoff } from './IdeHandoff';
 
 /**
  * Per-stage display panel for the detail page. Fetches the stage's LATEST
@@ -30,6 +31,8 @@ export function StagePanel({
   stage,
   spec,
   onReviewReady,
+  onDone,
+  agentProfileId,
   annotations,
   onAnnotationSave,
   onAnnotationRemove,
@@ -38,6 +41,8 @@ export function StagePanel({
   ticketId: string;
   stage: Stage;
   spec: SpecFile;
+  onDone?: () => void;
+  agentProfileId?: string;
   onReviewReady?: (review: { stageId: Stage["id"]; revision: number } | null) => void;
   annotations: InlineAnnotation[];
   onAnnotationSave: (a: InlineAnnotation) => void;
@@ -84,6 +89,7 @@ export function StagePanel({
 
   return (
     <div className="glass rounded-2xl flex flex-col gap-4 p-5 min-h-full">
+      <IdeHandoff profileId={agentProfileId} repoId={repoId} spec={spec} onDone={onDone} />
       {/* header: stage label + aiStatus + gateStatus + artifact kind + comment */}
       <div className="flex items-center gap-2 flex-wrap border-b border-blue-100 pb-3">
         <span className="font-semibold text-sm">{STAGE_LABELS[stage.id]}</span>

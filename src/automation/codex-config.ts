@@ -17,7 +17,7 @@ const providerSchema = z.object({
 });
 
 /** Copy only model transport settings; unrelated user configuration never enters managed runs. */
-export function managedModelConfiguration(source: string): { toml: string; model?: string; modelProvider: string } {
+export function managedModelConfiguration(source: string, overrides: { model?: string; model_provider?: string } = {}): { toml: string; model?: string; modelProvider: string } {
   let config: Record<string, any>;
   try { config = parse(source); } catch { throw new Error('Cannot parse Codex configuration. Inspect the user config.toml.'); }
   let profile = {};
@@ -25,7 +25,7 @@ export function managedModelConfiguration(source: string): { toml: string; model
     if (typeof config.profile !== 'string' || !config.profiles?.[config.profile]) throw new Error('Selected Codex configuration profile is missing.');
     profile = config.profiles[config.profile];
   }
-  const result = modelSchema.safeParse({ ...config, ...profile });
+  const result = modelSchema.safeParse({ ...config, ...profile, ...overrides });
   if (!result.success) throw new Error('Invalid Codex model configuration.');
   const model = result.data;
   const modelProvider = model.model_provider ?? 'openai';

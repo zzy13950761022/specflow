@@ -32,9 +32,21 @@ export function registerWorkflowRoutes(server: FastifyInstance, app: AppCore, ru
     try { return await app.getImplementationReview(req.params.repoId, req.params.ticketId, req.query.subtaskId); }
     catch (error) { return reply.code(400).send({ error: String((error as Error).message) }); }
   });
-  post('/automation', z.object({ enabled: z.boolean() }), (p, body) => {
-    if (body.enabled && !runnerEnabled) throw new Error('Start Dashboard with --runner before enabling automatic execution.');
-    return app.configureAutomation(p.repoId, p.ticketId, body.enabled);
+  post('/automation', z.object({ enabled: z.boolean(), profileId: z.string().optional() }), async (p, body) => {
+    if (body.enabled && !runnerEnabled) throw new Error('Restart Dashboard without --no-runner before enabling automatic execution.');
+    if (!body.enabled) { await app.handoffToIde(p.repoId, p.ticketId); return app.getSpec(p.repoId, p.ticketId); }
+    const current = await app.getSpec(p.repoId, p.ticketId);
+    const profile = body.enabled && (body.profileId || !current?.automation?.profile) ? await app.agentSettings.resolve(p.repoId, body.profileId) : undefined;
+    return app.configureAutomation(p.repoId, p.ticketId, body.enabled, profile);
+  });
+  server.get<{ Params: TicketParams }>(prefix + '/handoff', async (request, reply) => {
+    try { return await app.getHandoff(request.params.repoId, request.params.ticketId); }
+    catch (error) { return reply.code(400).send({ error: (error as Error).message }); }
+  });
+  post('/handoff', z.object({}), p => app.handoffToIde(p.repoId, p.ticketId));
+  post('/automation/resume', z.object({ profileId: z.string().optional() }), (p, body) => {
+    if (!runnerEnabled) throw new Error('Automatic execution is unavailable.');
+    return app.resumeAutomation(p.repoId, p.ticketId, body.profileId);
   });
   post('/automation/retry', z.object({}), async (p) => {
     if (!runnerEnabled) throw new Error('Automatic execution is unavailable.');

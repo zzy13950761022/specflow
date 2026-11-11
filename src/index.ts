@@ -8,7 +8,7 @@ import { startMcpServer } from './mcp/server.js';
 import { startDashboard } from './dashboard/server.js';
 import { FileWatcher } from './core/file-watcher.js';
 import { Orchestrator } from './automation/orchestrator.js';
-import { createCodexExecutor } from './automation/codex-runner.js';
+import { createAgentExecutor } from './automation/codex-runner.js';
 
 const DEFAULT_PORT = 4123;
 
@@ -28,11 +28,11 @@ async function main(): Promise<void> {
 
   if (dashboard) {
     // Dashboard-only mode: HTTP + WS + file watching, no MCP stdio.
-    const runnerEnabled = process.argv.includes('--runner');
+    const runnerEnabled = !process.argv.includes('--no-runner');
     const { url, fastify } = await startDashboard(app, { port, runnerEnabled });
     const watcher = new FileWatcher(app);
     await watcher.start();
-    const orchestrator = runnerEnabled ? new Orchestrator(app, createCodexExecutor(app)) : undefined;
+    const orchestrator = runnerEnabled ? new Orchestrator(app, createAgentExecutor(app)) : undefined;
     await orchestrator?.start();
     let shuttingDown = false;
     const shutdown = async () => {

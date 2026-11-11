@@ -5,8 +5,11 @@ import { fileURLToPath } from 'url';
 import { z } from 'zod';
 import { AppCore } from '../core/app-core.js';
 import { SpecFileSchema, SubtaskInputSchema } from '../core/schemas.js';
-import { CodexClient } from './codex-client.js';
-import { managedModelConfiguration } from './codex-config.js';
+import { runAgentTurn } from './agent-adapters.js';
+import { applySourceChanges, sourceOutputSchema } from './source-changes.js';
+import { fingerprint } from '../core/check-runner.js';
+import type { AgentProfile } from '../core/agent-profile.js';
+import { processGroupAlive } from '../core/processes.js';
 import { git, prepareWorktree } from './workspaces.js';
 import type { ExecuteTurn } from './orchestrator.js';
 
@@ -41,13 +44,11 @@ async function changedFiles(repo: string): Promise<Map<string, Buffer | null>> {
   return result;
 }
 
-/** Host owns every workflow mutation; Codex only returns one bounded task result. */
+/** Host owns workflow mutations; each configured Agent returns one bounded task result. */
 export function createCodexExecutor(app: AppCore, command = process.env.AI_PILOT_CODEX_BIN ?? 'codex', authPath?: string, configPath?: string): ExecuteTurn {
   return async (repoId, ticketId, runId, signal) => {
     const entry = await app.registry.resolve(repoId); if (!entry) throw new Error('Repository removed.');
     const worktree = await prepareWorktree(entry.path, ticketId);
-    const nativeConfig = await fs.readFile(join(worktree, '.codex', 'config.toml'), 'utf8').catch((error) => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''; throw error; });
-    if (/mcp_servers|hooks/.test(nativeConfig)) throw new Error('Managed execution requires a repository Codex configuration without MCP servers or hooks. Use interactive execution for this repository configuration.');
     await app.updateAutomation(repoId, ticketId, (spec) => { app.assertAutomationRun(spec, runId); spec.automation!.worktreePath = worktree; });
     const spec = (await app.getSpec(repoId, ticketId))!;
     const action = (await app.getExecutionStatus(repoId, ticketId)).actions[0];
@@ -59,22 +60,16 @@ export function createCodexExecutor(app: AppCore, command = process.env.AI_PILOT
       const claimed = await app.claimSubtask(repoId, ticketId, task.id, runId); task = claimed.stages[3].subtasks!.find((item) => item.id === task!.id)!;
     }
     const runtime = join(process.env.AI_PILOT_HOME ?? join(homedir(), '.specflow'), 'runners', repoId, ticketId);
-    await fs.mkdir(runtime, { recursive: true, mode: 0o700 });
-    // Do not inherit MCP servers or approval tools from the user's Codex configuration.
-    const userHome = process.env.CODEX_HOME ?? join(homedir(), '.codex');
-    const sourceConfig = await fs.readFile(configPath ?? join(userHome, 'config.toml'), 'utf8').catch((error) => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''; throw error; });
-    const model = managedModelConfiguration(sourceConfig);
-    await fs.writeFile(join(runtime, 'config.toml'), model.toml, { mode: 0o600 });
-    const authSource = authPath ?? join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'auth.json');
-    try { await fs.copyFile(authSource, join(runtime, 'auth.json')); await fs.chmod(join(runtime, 'auth.json'), 0o600); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-    const client = new CodexClient(command, ['app-server', '--listen', 'stdio://'], worktree, { ...process.env, CODEX_HOME: runtime });
+    const profile: AgentProfile = spec.automation?.profile ?? { id: 'legacy-codex', name: 'Codex', version: 1, agent: 'codex', command, configPath };
+    if (profile.agent === 'codex') {
+      const nativeConfig = await fs.readFile(join(worktree, '.codex', 'config.toml'), 'utf8').catch((error) => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''; throw error; });
+      if (/mcp_servers|hooks/.test(nativeConfig)) throw new Error('Managed execution requires a repository Codex configuration without MCP servers or hooks. Use interactive execution for this repository configuration.');
+    }
+    const hostApplied = profile.agent !== 'codex';
+    let ownedPid: number | undefined;
+    const initialFingerprint = hostApplied && implementation ? await fingerprint(worktree, entry.path) : undefined;
     const before = implementation ? await changedFiles(worktree) : undefined;
     try {
-      await client.start();
-      await app.updateAutomation(repoId, ticketId, (current) => { app.assertAutomationRun(current, runId); current.automation!.runnerPid = client.pid; });
-      const threadId = await client.thread(worktree, spec.automation?.threadId, { model: model.model, modelProvider: model.modelProvider });
-      await app.updateAutomation(repoId, ticketId, (current) => { app.assertAutomationRun(current, runId); current.automation!.threadId = threadId; });
       const prompt = await app.getStagePrompt(repoId, ticketId, spec.currentStageId);
       const instructions = [
         'AI Pilot managed execution: execute ONLY the supplied stage artifact or claimed subtask in this turn.',
@@ -88,7 +83,22 @@ export function createCodexExecutor(app: AppCore, command = process.env.AI_PILOT
         prompt.content,
       ].join(String.fromCharCode(10, 10));
       const skillPath = fileURLToPath(new URL('../../skills/specflow/SKILL.md', import.meta.url));
-      const output = await client.turn(threadId, worktree, instructions, implementation, implementation ? implementationOutputSchema : artifactOutputSchema, signal, skillPath);
+      const { text: output } = await runAgentTurn({
+        profile, cwd: worktree, runtime: profile.agent === 'codex' ? runtime : join(runtime, profile.agent),
+        prompt: instructions + (hostApplied && implementation ? String.fromCharCode(10) + 'Read the current source using read tools. Return files with repository-relative path and COMPLETE new UTF-8 content (null to delete). The host validates and applies them. Do not edit files or run commands yourself.' : ''),
+        schema: implementation ? (hostApplied ? sourceOutputSchema : implementationOutputSchema) : artifactOutputSchema,
+        signal, sessionId: spec.automation?.threadId, writable: implementation, skillPath, authPath,
+        onPid: async pid => { ownedPid = pid; await app.updateAutomation(repoId, ticketId, current => { app.assertAutomationRun(current, runId); current.automation!.runnerPid = pid; }); },
+        onSession: async session => { await app.updateAutomation(repoId, ticketId, current => { app.assertAutomationRun(current, runId); current.automation!.threadId = session; }); },
+      });
+      if (hostApplied && implementation) {
+        await app.updateAutomation(repoId, ticketId, async current => {
+          app.assertAutomationRun(current, runId);
+          if (await fingerprint(worktree, entry.path) !== initialFingerprint) throw new Error('Source changed during generation. Inspect the worktree before retrying.');
+          const changes = z.object({ summary: z.string().trim().min(1), files: z.array(z.object({ path: z.string(), content: z.string().nullable() })) }).parse(JSON.parse(output));
+          await applySourceChanges(worktree, changes.files);
+        });
+      }
       const current = (await app.getSpec(repoId, ticketId))!; app.assertAutomationRun(current, runId);
       if (task && before) {
         const result = z.object({ summary: z.string().trim().min(1) }).parse(JSON.parse(output));
@@ -113,8 +123,10 @@ export function createCodexExecutor(app: AppCore, command = process.env.AI_PILOT
         await app.recordAiOutput(repoId, ticketId, spec.currentStageId, result.content, artifact, spec.currentStageId === 'spec' ? result.acceptanceCriteria : undefined, runId);
       }
     } finally {
-      await client.close();
-      await app.updateAutomation(repoId, ticketId, (current) => { if (current.automation?.runnerPid === client.pid) current.automation!.runnerPid = undefined; });
+      await app.updateAutomation(repoId, ticketId, (current) => { if (ownedPid !== undefined && current.automation?.runnerPid === ownedPid && !processGroupAlive(ownedPid)) current.automation!.runnerPid = undefined; });
     }
   };
 }
+
+/** Generic entry point; the legacy export remains compatible with existing integrations. */
+export const createAgentExecutor = createCodexExecutor;

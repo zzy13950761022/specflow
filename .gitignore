@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 __pycache__/
 dist/
 dashboard_frontend/dist/
@@ -22,3 +22,5 @@ docs/superpowers/plans/*
 !docs/superpowers/plans/2026-11-10-repository-sync.md
 !docs/superpowers/plans/2026-11-11-dashboard-codex-orchestration.md
 !docs/superpowers/specs/2026-11-11-dashboard-codex-orchestration-design.md
+!docs/superpowers/plans/2026-11-11-dashboard-agent-workflow.md
+!docs/superpowers/specs/2026-11-11-dashboard-agent-workflow-design.md

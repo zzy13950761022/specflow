@@ -12,6 +12,7 @@ import { logger } from '../core/logger.js';
 import { pickFolder } from './folder-picker.js';
 import type { WebSocket } from 'ws';
 import { registerReviewSession } from './review-session.js';
+import { registerAgentRoutes } from './agent-routes.js';
 
 /**
  * The dashboard HTTP+WS server. The human lives here: they Approve/Reject
@@ -31,6 +32,7 @@ export async function buildDashboard(app: AppCore, options: DashboardOptions = {
   const fastify = Fastify({ logger: false });
   const runnerEnabled = options.runnerEnabled ?? false;
   registerReviewSession(fastify);
+  registerAgentRoutes(fastify, app);
   registerWorkflowRoutes(fastify, app, runnerEnabled);
   fastify.get('/api/automation', async () => ({ available: runnerEnabled }));
   await fastify.register(fastifyWebsocket);
@@ -128,8 +130,9 @@ export async function buildDashboard(app: AppCore, options: DashboardOptions = {
       const input = WorkflowOptionsSchema.extend({ ticketId: z.string().min(1), title: z.string().min(1) }).safeParse(req.body);
       if (!input.success) return reply.code(400).send({ error: input.error.message });
       const { ticketId, title, ...options } = input.data;
-      if (options.autoRun && !runnerEnabled) return reply.code(400).send({ error: 'Start Dashboard with --runner to enable automatic Codex execution.' });
+      if (options.autoRun && !runnerEnabled) return reply.code(400).send({ error: 'The Dashboard Agent runner is disabled. Restart without --no-runner.' });
       try {
+        if (options.autoRun) options.agentProfileId = (await app.agentSettings.resolve(req.params.repoId, options.agentProfileId)).id;
         return await app.createSpec(req.params.repoId, ticketId, title, options);
       } catch (e) {
         return reply.code(400).send({ error: String((e as Error).message) });

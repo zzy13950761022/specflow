@@ -73,6 +73,7 @@ export class StageMachine {
       schemaVersion: SCHEMA_VERSION,
       ticketId: input.ticketId,
       title: input.title,
+      description: input.description,
       specPath: `.specflow/specs/${input.ticketId}-${slugify(input.title)}.md`,
       currentStageId: 'spec',
       acceptanceCriteria: [],

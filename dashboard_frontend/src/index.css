@@ -193,3 +193,16 @@ body {
 .annotation-mark:hover {
   background: #ffe0b2;
 }
+
+.app-dialog { margin: auto; width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); color: var(--color-joule-ink); }
+.app-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.dialog-header, .dialog-footer { flex: none; }
+.app-dialog > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.dialog-body { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+.dialog-body > fieldset { min-width: 0; }
+.app-dialog::backdrop { background: rgb(15 35 60 / 38%); }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; font-weight: 500; }
+.field input, .field select, .field textarea, .toolbar-control { border: 1px solid #bdd3f0; border-radius: 8px; background: white; padding: 8px 10px; font-size: 0.875rem; font-weight: 400; min-width: 0; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #0064d9; outline-offset: 3px; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }

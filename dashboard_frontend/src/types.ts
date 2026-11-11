@@ -142,3 +142,8 @@ export interface RepoEntry {
   name: string;
   addedAt: string;
 }
+
+export type { AgentProfile, AgentSettings } from '../../src/core/agent-profile';
+export interface HandoffContext { context: string; workspacePath: string; mode: 'dashboard' | 'ide'; canHandoff: boolean; reason?: string }
+export type CreateSpecOptions = import('../../src/core/schemas').WorkflowOptions & { description?: string; agentProfileId?: string };
+export const AGENT_LABELS = { codex: 'Codex', claude: 'Claude Code', opencode: 'OpenCode' };

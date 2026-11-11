@@ -286,69 +286,91 @@ to write it after checking the preview. The script requires an unchanged complet
 legacy approval trail, rejects rework/new output/running claims, locks each ticket
 and saves original JSON under `.specflow/backups/` before atomic replacement.
 
-## Dashboard-driven local Codex execution
+## Dashboard-driven Agent execution
 
-Start the optional runner alongside Dashboard:
+Start Dashboard with the built-in runner:
 
 ```bash
-AI_PILOT_CODEX_BIN=/absolute/path/to/codex node dist/index.js --dashboard --runner
+npm run build
+npm start -- --dashboard
 ```
 
-Use **Run automatically with Codex** when creating a ticket, or **Enable automatic
-Codex execution** in an existing ticket. Creation and Dashboard Approve/Revise/Reject
-then drive the next bounded turn. The agent ends each artifact turn and holds no
-approval-polling call. The dashboard is the review surface throughout.
+Use `--no-runner` for a review-only Dashboard. `--runner` remains accepted
+for existing launch commands. In the header, open **Agent settings** next to
+**Add repo**, add a named Codex, Claude Code or OpenCode profile, and select a user
+or repository default. **Detect local config** reads the selected native model
+transport; **Test connection** sends one small model request in a temporary
+workspace. It does not create a ticket. Executable detection and model access are
+reported separately. If a CLI installation is broken, set **Command** to a working
+absolute executable path; the app does not install or repair global tools.
 
-The ticket JSON is the durable execution queue. Events wake reconciliation; startup
-reads saved ready tickets, and duplicate events cannot launch concurrent turns for
-the same ticket. Interrupted or failed runs stop for inspection and explicit retry. State-version
-comparisons fence reconciliation writes across independent controllers.
-A live previous runner prevents retry. Different tickets can run concurrently, each
-in its own Git worktree at `.specflow/worktrees/TICKET`, on `specflow/TICKET`.
-The registered checkout must have committed source changes before a new worktree
-is created. Existing worktrees are reused without resetting files or switching the
-registered checkout. Keep generated worktrees out of version control.
+Profiles can inherit the native configuration or override the model, provider,
+endpoint, configuration path and a credential environment-variable name. Set the
+variable's value in the environment that launches Dashboard. Profiles are stored
+under `AI_PILOT_HOME` (default `~/.specflow`), outside repository source;
+credential values are never part of Dashboard settings or ticket snapshots.
+Codex reads TOML, Claude Code reads its settings JSON, and OpenCode supports both
+legacy `provider/options` and v2 `providers/settings` configurations.
+Hyperspace endpoints and model identifiers remain specific to each Agent's
+protocol. Copy only the selected provider's transport, not native hooks, plugins,
+MCP servers or command approval preferences. OpenCode configuration compatibility
+is checked against its [official schema](https://opencode.ai/config.json).
 
-Canonical artifacts and approval state remain in the registered repo; source
-fingerprints, implementation snapshots and TEST/BUILD execute in the ticket worktree.
-A convenience check configuration is copied when creating the worktree, but the
-registered repository remains the command authority. The host reads check argv
-and fingerprint policy from that canonical configuration; model edits to the
-worktree copy cannot authorize different host commands. Install
-required project dependencies in that workspace or configure an explicit check
-wrapper that prepares them; the runner does not infer setup commands.
+**Create Spec** opens a modal containing repository, ticket, title, description,
+workflow, risk and execution settings. Choose **Run in Dashboard**, select a saved
+profile and click **Create & Start**. Creation persists the ticket before the
+runner starts; launch failures remain on the ticket with a Retry action. Manual
+creation stays available without any Agent configuration. The board searches
+ticket IDs/titles, filters state/stage/workflow and sorts results; URL query
+parameters preserve filters when returning from a detail page.
 
-The local adapter supports macOS/Linux and talks to Codex App Server over JSON-RPC stdio; its protocol subset
-was checked against Codex CLI 0.164 generated bindings. Set AI_PILOT_CODEX_BIN if
-the PATH executable is unavailable. Each ticket has a persisted native thread ID
-and isolated Codex configuration under the AI Pilot home directory. The service
-inherits the selected model and provider transport settings from the user
-`config.toml` (including the selected profile), so local/custom API endpoints
-are preserved. Only the selected provider is copied; MCP servers, hooks, project
-trust and user command approval settings are excluded. Thread creation and resume
-explicitly apply that model/provider.
-The service
-loads the maintained Specflow skill explicitly using the native skill input.
-It does not attach to or promise visibility in the Codex VS Code plugin.
+Each managed ticket snapshots its selected profile and keeps a native session ID.
+Approval, revision and rejection persist the human decision before waking the
+scheduler. A generated artifact ends its model turn at the review gate. No Agent
+polls for approval, and the user does not need to type a continuation message in
+an IDE. Changing defaults does not update existing ticket profiles. Explicit
+profile changes start a new native session. Implementation completion still
+requires human approval of current subtask reports before TEST.
 
-Artifact turns use a read-only sandbox. Implementation turns have workspace-write
-access to their worktree with network access disabled. Managed threads inherit no
-user-level MCP servers; repository Codex configurations declaring MCP servers or
-hooks are refused. Structured model output is validated and submitted by AppCore.
-The service owns claims, completion, platform checks and advancement. It never
-accepts an agent message as approval, and rejects interactive command escalation.
-Workflow approval does not authorize publishing or deployment.
+The ticket JSON is the durable queue; events wake reconciliation. Startup reads
+queued work, run/state-version checks reject duplicate or stale submissions, and
+only one managed run may own a ticket. Failed/interrupted work requires inspection
+and explicit retry. Each ticket has a separate Git worktree; committed source is
+required before its first creation. Existing worktrees and partial changes are
+preserved. Install dependencies or configure an explicit setup/check wrapper in
+that workspace. Canonical artifacts, decisions and check commands stay in the
+registered repository. Actual source/check evidence belongs to the worktree.
 
-Dashboard decisions require a browser review capability and reject cross-origin
-writes. The capability is kept in service/browser memory, not in workflow files
-or agent prompts. This protects the managed runner boundary and browser requests;
-it is not independent human identity attestation against unrestricted programs
-running as the same OS user.
+Codex uses native App Server JSON-RPC with read-only artifact turns and
+workspace-write implementation turns. Claude Code uses its structured print
+interface, and OpenCode uses standalone JSON execution. Those two adapters expose
+read tools and return complete file changes, which the host validates and applies
+inside the ticket worktree. They do not run implementation shell commands;
+configured TEST/BUILD commands are executed by the platform. Filesystem paths,
+symlinks, canonical workflow/configuration directories and source drift are checked
+before host-applied writes. Unknown interactive permissions fail the turn rather
+than implying human approval. These are managed runtime/tool boundaries, not
+independent identity attestation against unrestricted same-user local programs.
 
-Pause prevents new work and cancels a managed Codex turn. The owned Codex process group is terminated and checked before retry. Platform checks already
-running may finish; their evidence is still recorded. An interrupted model run
-can leave partial work in its worktree. Inspect it before using **Retry Codex
-execution**; retry preserves work and the recorded thread, never resets it.
+Every Stage starts with **Continue in VS Code**. **Copy context** is read-only.
+**Continue in IDE** cancels the managed run, waits for the owned process to exit,
+and transfers the ticket to IDE execution. Active platform checks must finish
+first. The copied context names the canonical repository ID, ticket and actual
+worktree. Open that workspace and invoke the installed Specflow skill with AI
+Pilot MCP available. The skill reads current persisted state even when viewing an
+older stage. A Dashboard session is not promised to appear in an IDE chat list.
+
+Before **Resume in Dashboard**, stop work in the IDE and complete/release active
+task claims. The backend checks claims and running checks, rereads workflow state,
+and starts a fresh native session from canonical context to incorporate IDE edits.
+It preserves the worktree, decisions and history. Source changes invalidate prior
+implementation/check evidence through the existing gates. Publishing and deployment
+continue to require their own explicit authorization.
+
+Settings, native diagnostics and ownership transfers require the browser review
+capability, as do human review decisions. Pausing fences late output and requests
+process cancellation. A retained live child blocks recovery rather than allowing
+a concurrent writer.
 
 ## Shared Claude/Codex Specflow skill
 

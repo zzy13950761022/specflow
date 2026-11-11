@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AgentProfileSchema } from './agent-profile.js';
 
 /**
  * Canonical schemas for the on-disk spec file (.specflow/specs/{TICKET}.json)
@@ -355,6 +356,8 @@ export const GateHistoryEntrySchema = z.object({
 export type GateHistoryEntry = z.infer<typeof GateHistoryEntrySchema>;
 
 export const WorkflowOptionsSchema = z.object({
+  description: z.string().max(30000).optional(),
+  agentProfileId: z.string().optional(),
   workflowKind: z.enum(['standard', 'bugfix', 'documentation']).default('standard'),
   risk: z.enum(['low', 'normal', 'high']).default('normal'),
   autoChecks: z.boolean().default(false),
@@ -367,6 +370,7 @@ export const SpecFileSchema = z.object({
   stateVersion: z.number().int().nonnegative().optional(),
   ticketId: z.string(),
   title: z.string(),
+  description: z.string().optional(),
   specPath: z.string(),
   currentStageId: StageIdSchema.default('spec'),
   legacyCompletion: z.object({
@@ -375,6 +379,7 @@ export const SpecFileSchema = z.object({
   acceptanceCriteria: z.array(z.object({ id: z.string().min(1), given: z.string().min(1), when: z.string().min(1), then: z.string().min(1) })).default([]),
   workflow: WorkflowOptionsSchema.default({}),
   automation: z.object({
+    profile: AgentProfileSchema.optional(), mode: z.enum(['dashboard', 'ide']).optional(),
     enabled: z.boolean(), status: z.enum(['queued', 'running', 'waiting_review', 'failed', 'paused', 'completed']),
     attempt: z.number().int().min(0).default(0), runId: z.string().optional(), ownerPid: z.number().int().optional(),
     runnerPid: z.number().int().optional(), threadId: z.string().optional(), worktreePath: z.string().optional(),

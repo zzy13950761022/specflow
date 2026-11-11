@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import type { SpecFile, Stage } from '../types';
+import { AGENT_LABELS, type AgentSettings, type SpecFile, type Stage } from '../types';
 
-export function WorkflowControls({ repoId, spec, stage, onDone }: { repoId: string; spec: SpecFile; stage: Stage; onDone: () => void }) {
+export function WorkflowControls({ repoId, spec, stage, onDone, profileId, onProfileChange }: { repoId: string; spec: SpecFile; stage: Stage; onDone: () => void; profileId: string; onProfileChange: (id: string) => void }) {
   const [reason, setReason] = useState('');
   const [reworking, setReworking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [runnerAvailable, setRunnerAvailable] = useState(false);
+  const [settings, setSettings] = useState<AgentSettings | null>(null);
+  useEffect(() => { let alive = true; api.agentSettings().then((value) => { if (alive) { setSettings(value); onProfileChange(spec.automation?.profile ? '' : value.repoDefaults[repoId] ?? value.defaultProfileId ?? ''); } }).catch((e) => { if (alive) setError(e.message); }); return () => { alive = false; }; }, [repoId, spec.ticketId, spec.automation?.profile?.id, spec.automation?.profile?.version, onProfileChange]);
   useEffect(() => { let alive = true; api.automationAvailable().then((value) => { if (alive) setRunnerAvailable(value.available); }).catch(() => {}); return () => { alive = false; }; }, []);
   useEffect(() => {
     let alive = true;
@@ -29,9 +31,10 @@ export function WorkflowControls({ repoId, spec, stage, onDone }: { repoId: stri
       <div className="flex flex-wrap gap-3 items-center text-sm">
         <span>{spec.workflow.workflowKind} · {spec.workflow.risk} risk</span>
         <span>Execution: {spec.execution.status.replaceAll('_', ' ')}</span>
-        {spec.automation?.enabled && <span>Codex: {spec.automation.status.replaceAll('_', ' ')}</span>}
-        {runnerAvailable && !spec.automation?.enabled && spec.execution.status !== 'completed' && <button disabled={busy} className="rounded-lg px-3 py-1 bg-blue-100 disabled:opacity-50" onClick={() => run(() => api.configureAutomation(repoId, spec.ticketId, true))}>Enable automatic Codex execution</button>}
-        {runnerAvailable && spec.automation?.status === 'failed' && <button disabled={busy} className="rounded-lg px-3 py-1 bg-orange-100 disabled:opacity-50" onClick={() => run(() => api.retryAutomation(repoId, spec.ticketId))}>Retry Codex execution</button>}
+        {spec.automation && <span>{spec.automation.profile ? AGENT_LABELS[spec.automation.profile.agent] : 'Agent'}: {spec.automation.status.replaceAll('_', ' ')}{spec.automation.profile ? ' · ' + spec.automation.profile.name : ''}{spec.automation.mode === 'ide' ? ' · IDE' : ''}</span>}
+        {(runnerAvailable || !!settings?.profiles.length) && !spec.automation?.enabled && spec.execution.status !== 'completed' && spec.automation?.mode !== 'ide' && <button disabled={busy} className="rounded-lg px-3 py-1 bg-blue-100 disabled:opacity-50" onClick={() => run(() => api.configureAutomation(repoId, spec.ticketId, true, profileId || undefined))}>Run in Dashboard</button>}
+        {spec.automation?.status === 'failed' && <button disabled={busy} className="rounded-lg px-3 py-1 bg-orange-100 disabled:opacity-50" onClick={() => run(() => api.retryAutomation(repoId, spec.ticketId))}>Retry agent execution</button>}
+        {!spec.automation?.enabled && !!settings?.profiles.length && <label className="text-xs flex items-center gap-2">Agent profile<select aria-label="Agent profile" className="toolbar-control" value={profileId} onChange={(e) => onProfileChange(e.target.value)}><option value="">{spec.automation?.profile ? 'Keep current profile · ' + spec.automation.profile.name + ' v' + spec.automation.profile.version : 'Use default profile'}</option>{settings.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · {AGENT_LABELS[profile.agent]}</option>)}</select></label>}
         <span className="text-xs text-slate-500">Retries: {spec.execution.retryCount}</span>
         {spec.execution.status !== 'completed' && (
           <button disabled={busy} className="rounded-lg px-3 py-1 bg-blue-100 disabled:opacity-50" onClick={() => run(() => paused ? api.resume(repoId, spec.ticketId) : api.pause(repoId, spec.ticketId))}>
@@ -51,7 +54,7 @@ export function WorkflowControls({ repoId, spec, stage, onDone }: { repoId: stri
       {spec.execution.lastSuccessfulStep && <p className="text-xs text-slate-500">Last successful step: {spec.execution.lastSuccessfulStep}</p>}
       {spec.automation?.error && <p role="alert" className="text-sm text-red-600">{spec.automation.error}</p>}
       {spec.automation?.worktreePath && <p className="text-xs text-slate-500 break-all">Workspace: {spec.automation.worktreePath}</p>}
-      {spec.automation?.threadId && <p className="text-xs text-slate-500 break-all">Codex session: {spec.automation.threadId}</p>}
+      {spec.automation?.threadId && <p className="text-xs text-slate-500 break-all">Agent session: {spec.automation.threadId}</p>}
       {next && <p className="text-xs text-slate-500">{next}</p>}
       {reworking && (
         <div className="flex gap-2">

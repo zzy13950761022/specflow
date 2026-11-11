@@ -55,3 +55,10 @@ it('keeps default configuration minimal and rejects invalid or undefined provide
   expect(() => managedModelConfiguration('model_provider = "missing"')).toThrow(/provider/i);
   expect(() => managedModelConfiguration('malformed = [')).toThrow(/config/i);
 });
+
+it('selects an explicitly pinned provider before filtering native provider definitions', () => {
+  const source = ['model_provider="first"', '[model_providers.first]', 'base_url="https://first.example/v1"', '[model_providers.second]', 'base_url="https://second.example/v1"', 'wire_api="responses"', 'env_key="SECOND_KEY"'].join(String.fromCharCode(10));
+  const result = managedModelConfiguration(source, { model_provider: 'second', model: 'pinned-model' });
+  expect(parse(result.toml).model_providers).toEqual({ second: { base_url: 'https://second.example/v1', wire_api: 'responses', env_key: 'SECOND_KEY' } });
+  expect(result.model).toBe('pinned-model');
+});

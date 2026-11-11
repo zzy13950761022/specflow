@@ -95,7 +95,7 @@ export class Orchestrator {
         else if (action.tool === 'run_stage_check') await this.app.runStageCheck(repoId, ticketId, action.stageId as 'test' | 'build', runId);
         else await this.execute(repoId, ticketId, runId, signal);
         const after = await this.app.getSpec(repoId, ticketId);
-        if (after && after.execution.status !== 'paused' && progress(after) === progress(spec)) throw new Error('Codex run made no workflow progress. Inspect the result and retry explicitly.');
+        if (after && after.execution.status !== 'paused' && progress(after) === progress(spec)) throw new Error('Agent run made no workflow progress. Inspect the result and retry explicitly.');
         await this.app.updateAutomation(repoId, ticketId, (current) => {
           if (current.automation?.runId !== runId) return;
           current.automation.status = current.execution.status === 'completed' ? 'completed' : 'queued'; current.automation.runId = undefined; current.automation.runnerPid = undefined; current.automation.finishedAt = new Date().toISOString();
@@ -106,6 +106,10 @@ export class Orchestrator {
           current.automation.status = 'failed'; current.automation.error = String((error as Error).message); current.automation.runId = undefined; if (!processGroupAlive(current.automation.runnerPid)) current.automation.runnerPid = undefined;
         });
         return;
+      } finally {
+        await this.app.updateAutomation(repoId, ticketId, (current) => {
+          if (current.automation?.ownerPid === process.pid && current.automation.attempt === spec.automation!.attempt + 1 && !processGroupAlive(current.automation.runnerPid)) current.automation.ownerPid = undefined;
+        });
       }
     }
   }

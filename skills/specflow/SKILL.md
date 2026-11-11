@@ -36,7 +36,13 @@ TEST. A workflow decision does not authorize command escalation or deployment.
    tool results for platform operations.
 2. Resolve the user's target repository, using the current Git root when none is
    specified. Match its resolved path to `list_repos`; use that entry's `id`. Never
-   hardcode a repository ID. If it is not registered, ask the user to add it in
+   hardcode a repository ID. For Dashboard handoff context, match both its explicit
+   canonical Repository ID and Repository path against `list_repos`. Verify the
+   supplied Working directory against the ticket's registered worktree; use that
+   directory for source changes without registering it as a new repository. Read
+   the ticket again before editing. If automation remains enabled or is still
+   stopping, use Dashboard's Continue in IDE action first. Copying context alone
+   does not transfer execution ownership. If it is not registered, ask the user to add it in
    Dashboard; do not silently choose a different repository.
 3. Extract the ticket ID and feature description; ask once if the ID is missing.
    Check `list_specs`/`get_spec` before creating anything. For an existing ticket,

@@ -18,6 +18,10 @@ import { resetTaskAndDependents } from './task-scheduler.js';
 import { implementationReport } from './implementation-report.js';
 import { processGroupAlive } from './processes.js';
 import type { SubtaskInput } from './schemas.js';
+import { AgentSettingsStore } from '../automation/agent-settings.js';
+import { pinProfile } from '../automation/agent-detection.js';
+import type { AgentProfile } from './agent-profile.js';
+import { getHandoff, handoffToIde, resumeAutomation } from '../automation/handoff.js';
 
 /**
  * The shared singleton. Both the MCP server and the dashboard talk ONLY to
@@ -31,6 +35,7 @@ export class AppCore {
   readonly templates = new PromptTemplates();
   readonly events = new EventBus();
   readonly implLogs = new ImplLogStore();
+  readonly agentSettings = new AgentSettingsStore();
 
   /* ---- repos ---- */
 
@@ -77,9 +82,12 @@ export class AppCore {
 
   async createSpec(repoId: string, ticketId: string, title: string, options: WorkflowOptions = {}): Promise<SpecFile> {
     const path = await this.repoPath(repoId);
+    const profile = options.autoRun && options.agentProfileId ? await pinProfile(await this.agentSettings.resolve(repoId, options.agentProfileId)) : undefined;
     const saved = await this.store.transaction(path, ticketId, async (existing) => {
       if (existing) throw new Error(`Spec already exists: ${ticketId}`);
-      return this.stageMachine.createSpec({ ticketId, title, ...options });
+      const spec = this.stageMachine.createSpec({ ticketId, title, ...options });
+      if (spec.automation) { spec.automation.profile = profile; spec.automation.mode = 'dashboard'; }
+      return spec;
     });
     this.events.emit({ type: 'spec.created', repoId, spec: saved });
     return saved;
@@ -99,7 +107,7 @@ export class AppCore {
       title: spec.title,
       upstreamArtifact: upstream,
     });
-    return { ...prompt, content: prompt.content + String.fromCharCode(10, 10) + '## Approved stage context' + String.fromCharCode(10) + JSON.stringify(context, null, 2) };
+    return { ...prompt, content: prompt.content + (spec.description ? '\n\n## User brief\n' + spec.description : '') + String.fromCharCode(10, 10) + '## Approved stage context' + String.fromCharCode(10) + JSON.stringify(context, null, 2) };
   }
 
   async getStageContext(repoId: string, ticketId: string, stageId: StageId) {
@@ -583,18 +591,26 @@ export class AppCore {
     if (runId && (spec.automation?.runId !== runId || spec.automation.status !== 'running' || !spec.automation.enabled || spec.execution.status === 'paused')) throw new Error('Automation run is no longer current; discard its result.');
   }
 
-  async updateAutomation(repoId: string, ticketId: string, op: (spec: SpecFile) => void): Promise<SpecFile> {
-    return this.mutate(repoId, ticketId, async (spec) => { op(spec); return spec; });
+  async updateAutomation(repoId: string, ticketId: string, op: (spec: SpecFile) => void | Promise<void>): Promise<SpecFile> {
+    return this.mutate(repoId, ticketId, async (spec) => { await op(spec); return spec; });
   }
 
-  async configureAutomation(repoId: string, ticketId: string, enabled: boolean): Promise<SpecFile> {
+  async configureAutomation(repoId: string, ticketId: string, enabled: boolean, profile?: AgentProfile): Promise<SpecFile> {
+    if (profile) profile = await pinProfile(profile);
     return this.updateAutomation(repoId, ticketId, (spec) => {
       if (spec.automation?.status === 'running') throw new Error('Pause the active run before changing automation.');
-      if (processGroupAlive(spec.automation?.runnerPid)) throw new Error('Previous Codex process is still alive. Stop it before retrying.');
+      if (processGroupAlive(spec.automation?.runnerPid)) throw new Error('Previous Agent process is still alive. Stop it before retrying.');
+      if (enabled && (!spec.automation?.enabled || profile) && spec.stages.some(stage => stage.subtasks?.some(task => task.status === 'running') || stage.activeCheck)) throw new Error('Finish or release active task claims and checks before changing the Agent.');
       if (enabled) spec.execution.error = undefined;
       spec.automation = { ...spec.automation, enabled, status: spec.execution.status === 'completed' ? 'completed' : spec.execution.status === 'paused' ? 'paused' : 'queued', attempt: spec.automation?.attempt ?? 0, error: undefined, runId: undefined };
+      if (profile) { spec.automation.profile = structuredClone(profile); spec.automation.threadId = undefined; }
+      spec.automation.mode = enabled ? 'dashboard' : 'ide';
     });
   }
+
+  getHandoff(repoId: string, ticketId: string) { return getHandoff(this, repoId, ticketId); }
+  handoffToIde(repoId: string, ticketId: string) { return handoffToIde(this, repoId, ticketId); }
+  resumeAutomation(repoId: string, ticketId: string, profileId?: string) { return resumeAutomation(this, repoId, ticketId, profileId); }
 
   private async requireSpec(path: string, ticketId: string): Promise<SpecFile> {
     const spec = await this.store.read(path, ticketId);

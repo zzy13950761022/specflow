@@ -9,11 +9,12 @@ export function registerReviewSession(server: FastifyInstance): void {
     reply.header('cache-control', 'no-store'); return { token };
   });
   server.addHook('preHandler', async (req, reply) => {
-    if (req.method === 'GET' || req.method === 'HEAD') return;
     const path = req.routeOptions.url ?? req.url.split('?')[0];
+    const configuration = path.startsWith('/api/agents/') || path.endsWith('/handoff');
+    if ((req.method === 'GET' || req.method === 'HEAD') && !configuration) return;
     const decision = /[/](approve|reject|needs-revision)$/.test(path) || path.endsWith('/develop/review') || path.includes('/automation');
     const managedCreation = path.endsWith('/specs') && (req.body as { autoRun?: boolean } | null)?.autoRun;
-    if (!decision && !managedCreation) return;
+    if (!decision && !managedCreation && !configuration) return;
     const origin = req.headers.origin;
     if (origin && origin !== 'http://' + req.headers.host && origin !== 'https://' + req.headers.host) return reply.code(403).send({ error: 'Review must originate from this Dashboard.' });
     const provided = req.headers['x-specflow-review-session'];

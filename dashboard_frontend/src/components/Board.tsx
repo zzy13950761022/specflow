@@ -1,5 +1,6 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { currentStageId, GATE_STYLES } from '../lib/stage';
+import { boardStatus } from '../lib/board';
 import { STAGE_LABELS, type SpecFile } from '../types';
 import { StageDot } from './StageTimeline';
 
@@ -33,7 +34,7 @@ export function Board({ repoId, specs }: { repoId: string | null; specs: SpecFil
  * the active stage label, and its gate status.
  */
 function SpecRow({ repoId, spec }: { repoId: string; spec: SpecFile }) {
-  const navigate = useNavigate();
+  const [params] = useSearchParams();
 
   const activeStageId = currentStageId(spec);
   const activeStage = spec.stages.find((s) => s.id === activeStageId)!;
@@ -42,8 +43,8 @@ function SpecRow({ repoId, spec }: { repoId: string; spec: SpecFile }) {
   const detailPath = `/repos/${repoId}/specs/${spec.ticketId}`;
 
   return (
-    <div
-      onClick={() => navigate(detailPath)}
+    <Link
+      to={detailPath + (params.toString() ? '?' + params.toString() : '')}
       className={`glass rounded-2xl overflow-hidden transition-all cursor-pointer hover:bg-blue-50 ${hasPending ? 'border border-amber-300' : 'border border-transparent'}`}
     >
       <div className="w-full flex items-center gap-3 px-4 py-3 text-left">
@@ -51,7 +52,7 @@ function SpecRow({ repoId, spec }: { repoId: string; spec: SpecFile }) {
 
         <span className="text-sm text-gray-800 truncate flex-1 min-w-0">{spec.title}</span>
 
-        <span className="text-[11px] text-slate-500">{spec.execution.status.replaceAll("_", " ")}</span>
+        <span className="text-[11px] text-slate-500">{boardStatus(spec).replaceAll("_", " ")}</span>
         {/* status labels: active stage · gate status */}
         <div className="flex items-center gap-2 shrink-0 ml-2">
           <span className="text-[11px] rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 font-medium">
@@ -72,6 +73,6 @@ function SpecRow({ repoId, spec }: { repoId: string; spec: SpecFile }) {
           ))}
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
