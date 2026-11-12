@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { BulkImplementationReview } from './BulkImplementationReview';
 import { ImplementationReview } from './ImplementationReview';
 import type { SpecFile } from '../types';
 
@@ -103,6 +104,7 @@ export function DevelopSubtasks({ repoId, spec }: { repoId: string; spec: SpecFi
       {subtasks.length > 0 && subtasks.every((task) => task.completed) && spec.currentStageId === 'develop' && spec.execution.status !== 'paused' && (
         <button disabled={spec.automation?.status === 'running'} className="rounded-lg bg-blue-100 px-3 py-2 text-sm disabled:opacity-50" onClick={async () => { try { await api.submitImplementationReview(repoId, spec.ticketId); } catch (error) { setError(String((error as Error).message)); } }}>Submit implementation for review</button>
       )}
+      <BulkImplementationReview key={spec.ticketId} repoId={repoId} ticketId={spec.ticketId} tasks={subtasks} canReview={spec.currentStageId === 'develop'} />
       {subtasks.filter((task) => task.review).map((task) => <ImplementationReview key={task.review!.id} repoId={repoId} ticketId={spec.ticketId} task={task} onDone={() => {}} />)}
 
       <div className="flex gap-1.5 mt-0.5">

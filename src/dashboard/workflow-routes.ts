@@ -26,6 +26,13 @@ export function registerWorkflowRoutes(server: FastifyInstance, app: AppCore, ru
   post('/develop/completed', z.object({ subtaskId: z.string(), completed: z.boolean(), claimId: z.string().optional() }),
     (p, body) => app.setSubtaskCompleted(p.repoId, p.ticketId, body.subtaskId, body.completed, body.claimId));
   post('/develop/submit-review', z.object({}), (p) => app.submitImplementationReview(p.repoId, p.ticketId));
+  post('/develop/review-all', z.object({ reviews: z.array(z.object({ subtaskId: z.string().min(1), expectedReviewId: z.string().min(1) })).min(1), verdict: z.enum(['approved', 'rejected', 'needs_revision']), comment: z.string().optional() }),
+    (p, body) => app.reviewImplementationBatch(p.repoId, p.ticketId, body.reviews, body.verdict, body.comment));
+  server.get<{ Params: TicketParams }>(prefix + '/develop/reviews', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    try { return await app.getImplementationReviews(req.params.repoId, req.params.ticketId); }
+    catch (error) { return reply.code(400).send({ error: String((error as Error).message) }); }
+  });
   post('/develop/review', z.object({ subtaskId: z.string(), expectedReviewId: z.string(), verdict: z.enum(['approved', 'rejected', 'needs_revision']), comment: z.string().optional() }),
     (p, body) => app.reviewImplementation(p.repoId, p.ticketId, body.subtaskId, body.expectedReviewId, body.verdict, body.comment));
   server.get<{ Params: TicketParams; Querystring: { subtaskId: string } }>(prefix + '/develop/review', async (req, reply) => {

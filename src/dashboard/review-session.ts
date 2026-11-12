@@ -12,7 +12,7 @@ export function registerReviewSession(server: FastifyInstance): void {
     const path = req.routeOptions.url ?? req.url.split('?')[0];
     const configuration = path.startsWith('/api/agents/') || path.endsWith('/handoff');
     if ((req.method === 'GET' || req.method === 'HEAD') && !configuration) return;
-    const decision = /[/](approve|reject|needs-revision)$/.test(path) || path.endsWith('/develop/review') || path.includes('/automation');
+    const decision = /[/](approve|reject|needs-revision)$/.test(path) || path.endsWith('/develop/review') || path.endsWith('/develop/review-all') || path.includes('/automation');
     const managedCreation = path.endsWith('/specs') && (req.body as { autoRun?: boolean } | null)?.autoRun;
     if (!decision && !managedCreation && !configuration) return;
     const origin = req.headers.origin;

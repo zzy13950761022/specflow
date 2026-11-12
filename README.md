@@ -135,6 +135,13 @@ The develop stage has an explicit plan-before-code structure:
    implementation report before entering TEST. Reports bind the plan revision,
    task attempt and source fingerprint; changed code invalidates old approvals.
 
+**Review all reports** opens the implementation reports together. After reading,
+use **Approve all pending**, **Revise all pending**, or **Reject all pending**.
+Revision and rejection require one shared comment and reset the selected tasks
+and their dependents for rework. Each batch applies to the exact pending report
+versions in one update; changed reports or source prevent stale approvals.
+Individual report review remains available.
+
 Task drafts before the first DEVELOP artifact do not increment its revision or
 mark it outdated. Changing tasks after an artifact exists invalidates that plan
 and its approval; submit the updated plan for review before implementing.

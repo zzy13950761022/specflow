@@ -14,7 +14,7 @@ import { canAutoApprove } from './workflow-policy.js';
 import { nextActions, synchronizeExecution } from './execution.js';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { resetTaskAndDependents } from './task-scheduler.js';
+import { resetTaskAndDependents, resetTasksAndDependents } from './task-scheduler.js';
 import { implementationReport } from './implementation-report.js';
 import { processGroupAlive } from './processes.js';
 import type { SubtaskInput } from './schemas.js';
@@ -308,6 +308,45 @@ export class AppCore {
     const task = spec.stages[3].subtasks?.find((task) => task.id === subtaskId);
     if (!task?.review) throw new Error('No implementation review for this task.');
     return { review: task.review, content: await fs.readFile(join(path, task.review.reportPath), 'utf8'), sourceChanged: task.review.codeFingerprint !== await fingerprint(this.sourcePath(spec, path), path) };
+  }
+
+  async getImplementationReviews(repoId: string, ticketId: string) {
+    const path = await this.repoPath(repoId);
+    const spec = await this.requireSpec(path, ticketId);
+    const source = await fingerprint(this.sourcePath(spec, path), path);
+    return Promise.all((spec.stages[3].subtasks ?? []).filter(task => task.review).map(async task => ({
+      subtaskId: task.id, description: task.description, review: task.review!,
+      content: await fs.readFile(join(path, task.review!.reportPath), 'utf8'),
+      sourceChanged: task.review!.codeFingerprint !== source,
+    })));
+  }
+
+  async reviewImplementationBatch(repoId: string, ticketId: string, reviews: Array<{ subtaskId: string; expectedReviewId: string }>, verdict: 'approved' | 'rejected' | 'needs_revision', comment?: string): Promise<SpecFile> {
+    return this.mutate(repoId, ticketId, async (spec, path) => {
+      this.stageMachine.assertCurrent(spec, 'develop', true);
+      const stage = spec.stages[3];
+      const pending = (stage.subtasks ?? []).filter(task => task.review?.status === 'pending_review');
+      const expected = new Map(reviews.map(review => [review.subtaskId, review.expectedReviewId]));
+      if (!pending.length || reviews.length !== pending.length || expected.size !== reviews.length || pending.some(task =>
+        !task.completed || task.review!.id !== expected.get(task.id) || task.review!.developRevision !== stage.revision || task.review!.taskAttempt !== task.attempt
+      )) throw new Error('Pending implementation reports changed. Reload all reports before reviewing.');
+      if (verdict !== 'approved' && !comment?.trim()) throw new Error('A revision or rejection comment is required.');
+      if (verdict === 'approved') {
+        const source = await fingerprint(this.sourcePath(spec, path), path);
+        if (pending.some(task => task.review!.codeFingerprint !== source)) throw new Error('Implementation source changed. Submit fresh reviews before approving.');
+      }
+      const reviewedAt = new Date().toISOString();
+      for (const task of pending) {
+        Object.assign(task.review!, { status: verdict, comment: comment?.trim(), reviewedAt });
+        if (verdict !== 'approved') task.reviewHistory = [...(task.reviewHistory ?? []), { ...task.review! }];
+      }
+      if (verdict !== 'approved') {
+        resetTasksAndDependents(stage.subtasks!, pending.map(task => task.id));
+        for (const task of stage.subtasks!) task.review = undefined;
+        stage.aiStatus = 'in_progress';
+      }
+      return spec;
+    });
   }
 
   async reviewImplementation(repoId: string, ticketId: string, subtaskId: string, expectedReviewId: string, verdict: 'approved' | 'rejected' | 'needs_revision', comment?: string): Promise<SpecFile> {

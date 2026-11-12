@@ -607,3 +607,69 @@ test('Create Spec requires an execution configuration instead of silently creati
   await expect(dialog.getByText(/Add configurations in Agent settings/)).toBeVisible();
   expect(state.creations).toHaveLength(0);
 });
+
+for (const verdict of ['approved', 'needs_revision', 'rejected'] as const) {
+  test('reviews all implementation reports with one ' + verdict + ' decision', async ({ page }) => {
+    const added = await page.request.post('/api/repos', { data: { path: repo } });
+    const repoId = (await added.json()).id;
+    const ticketId = 'E2E-BULK-' + verdict;
+    const url = '/api/repos/' + repoId + '/specs/' + ticketId;
+    const client = await mcpClient();
+    async function tool(name: string, args: Record<string, unknown>) {
+      const result = await client.callTool({ name, arguments: { repoId, ticketId, ...args } });
+      expect(result.isError).not.toBe(true);
+    }
+    const state = async () => (await page.request.get(url)).json();
+    try {
+      await tool('create_spec', { title: 'Bulk implementation review', workflowKind: 'bugfix' });
+      await tool('record_ai_output', { stageId: 'spec', content: 'Requirements' });
+      await page.goto(url.replace('/api', ''));
+      await page.getByRole('button', { name: 'Approve', exact: true }).click();
+      await expect.poll(async () => (await state()).stages[0].gate.status).toBe('approved');
+      await tool('advance_stage', { stageId: 'spec' });
+      await tool('set_develop_subtasks', { subtasks: [{ id: 'A', description: 'Implement validation' }, { id: 'B', description: 'Test validation', dependsOn: ['A'] }] });
+      await tool('record_ai_output', { stageId: 'develop', content: 'Development plan' });
+      await page.getByRole('button', { name: 'Select DEVELOP', exact: true }).click();
+      await page.getByRole('button', { name: 'Approve', exact: true }).click();
+      await expect.poll(async () => (await state()).stages[3].gate.status).toBe('approved');
+      for (const id of ['A', 'B']) {
+        await tool('log_implementation', { subtaskId: id, summary: 'Completed task ' + id, filesModified: ['source.ts'], filesCreated: [], statistics: { linesAdded: 1, linesRemoved: 0 }, artifacts: {} });
+        await tool('set_subtask_completed', { subtaskId: id, completed: true });
+      }
+      await tool('submit_implementation_review', {});
+      await page.getByRole('button', { name: 'Review all reports (2)', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Implementation reports', exact: true });
+      await expect(dialog.getByText('Completed task A', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('Completed task B', { exact: true })).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Revise all pending (2)', exact: true })).toBeDisabled();
+      await expect(dialog.getByRole('button', { name: 'Reject all pending (2)', exact: true })).toBeDisabled();
+      if (verdict === 'approved') {
+        await fs.writeFile(join(repo, 'bulk-source.ts'), 'export const changed = true;');
+        await dialog.getByRole('button', { name: 'Approve all pending (2)', exact: true }).click();
+        await expect(dialog.getByRole('alert')).toContainText('source changed');
+        expect((await state()).stages[3].subtasks.map((task: any) => task.review.status)).toEqual(['pending_review', 'pending_review']);
+        await tool('submit_implementation_review', {});
+        await dialog.getByRole('button', { name: 'Reload reports', exact: true }).click();
+        await expect(dialog.getByRole('button', { name: 'Approve all pending (2)', exact: true })).toBeEnabled();
+        await page.screenshot({ path: '/private/tmp/ai-pilot-bulk-review.png', fullPage: true });
+      } else {
+        await dialog.getByLabel('Comment for all pending implementations').fill('Fix validation for all pending tasks');
+      }
+      const label = verdict === 'approved' ? 'Approve' : verdict === 'needs_revision' ? 'Revise' : 'Reject';
+      await dialog.getByRole('button', { name: label + ' all pending (2)', exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      if (verdict === 'approved') {
+        await expect.poll(async () => (await state()).stages[3].subtasks.map((task: any) => task.review.status)).toEqual(['approved', 'approved']);
+        await expect(page.getByRole('button', { name: 'Advance stage', exact: true })).toBeVisible();
+      } else {
+        const revised = await state();
+        for (const task of revised.stages[3].subtasks) {
+          expect(task.completed).toBe(false);
+          expect(task.attempt).toBe(1);
+          expect(task.reviewHistory.at(-1)).toMatchObject({ status: verdict, comment: 'Fix validation for all pending tasks' });
+        }
+        expect(revised.currentStageId).toBe('develop');
+      }
+    } finally { await client.close(); }
+  });
+}

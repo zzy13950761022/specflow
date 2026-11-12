@@ -38,12 +38,17 @@ export function readyTasks(tasks: Subtask[]): Subtask[] {
 }
 
 export function resetTaskAndDependents(tasks: Subtask[], id: string): void {
-  const affected = new Set([id]);
+  resetTasksAndDependents(tasks, [id]);
+}
+
+export function resetTasksAndDependents(tasks: Subtask[], ids: string[]): void {
+  const roots = new Set(ids);
+  const affected = new Set(ids);
   let changed = true;
   while (changed) {
     changed = false;
     for (const task of tasks) if (!affected.has(task.id) && task.dependsOn.some((id) => affected.has(id))) { affected.add(task.id); changed = true; }
   }
-  if (tasks.some((task) => task.id !== id && affected.has(task.id) && task.status === 'running')) throw new Error('Release running dependent tasks before resetting upstream work.');
+  if (tasks.some((task) => !roots.has(task.id) && affected.has(task.id) && task.status === 'running')) throw new Error('Release running dependent tasks before resetting upstream work.');
   for (const task of tasks) if (affected.has(task.id)) { task.completed = false; task.status = 'pending'; task.claimId = undefined; task.attempt++; }
 }

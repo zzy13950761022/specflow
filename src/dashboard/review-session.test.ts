@@ -7,6 +7,7 @@ it('rejects unauthenticated and cross-origin approval writes before domain mutat
   try {
     const path = '/api/repos/unknown/specs/T-1/approve';
     expect((await server.inject({ method: 'POST', url: path, payload: {} })).statusCode).toBe(403);
+    expect((await server.inject({ method: 'POST', url: '/api/repos/unknown/specs/T-1/develop/review-all', payload: { reviews: [] } })).statusCode).toBe(403);
     expect((await server.inject({ method: 'GET', url: '/api/review-session' })).statusCode).toBe(403);
     const session = await server.inject({ method: 'GET', url: '/api/review-session', headers: { 'sec-fetch-site': 'same-origin' } });
     expect(session.headers['cache-control']).toBe('no-store');
