@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Install the repository skill as shared user-level links, preserving old copies."""
 import argparse
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 
-def install(source, user_home, apply=False):
+def install(source, user_home, apply=False, opencode_config_dir=None):
     source = source.resolve()
     if not (source / 'SKILL.md').is_file():
         raise ValueError('Source must contain SKILL.md: ' + str(source))
     shared = user_home / '.agents/skills/specflow'
-    targets = [(shared, source), (user_home / '.claude/skills/specflow', shared)]
+    opencode = opencode_config_dir or user_home / '.config/opencode'
+    targets = [(shared, source), (user_home / '.claude/skills/specflow', shared), (opencode / 'skills/specflow', shared)]
     if any(source == target or target in source.parents for target, _ in targets):
         raise ValueError('Keep the maintained source outside the installation targets to avoid circular links.')
     changes = []
@@ -62,6 +64,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[1] / 'skills/specflow')
     parser.add_argument('--user-home', type=Path, default=Path.home())
+    parser.add_argument('--opencode-config-dir', type=Path, help='OpenCode configuration directory; defaults to XDG_CONFIG_HOME/opencode or ~/.config/opencode')
     parser.add_argument('--apply', action='store_true', help='Write links and preserve existing skills in backups; otherwise preview only')
     arguments = parser.parse_args()
-    install(arguments.source, arguments.user_home.resolve(), arguments.apply)
+    user_home = arguments.user_home.expanduser().resolve()
+    opencode = arguments.opencode_config_dir
+    if opencode is None and user_home == Path.home().resolve() and os.environ.get('XDG_CONFIG_HOME'):
+        opencode = Path(os.environ['XDG_CONFIG_HOME']) / 'opencode'
+    install(arguments.source.expanduser(), user_home, arguments.apply, opencode.expanduser().absolute() if opencode else None)

@@ -50,6 +50,45 @@
       "repository": "/tmp/specflow-eval/repo",
       "get_spec": { "ticketId": "BUILD-1", "currentStageId": "build", "execution": { "status": "ready" } },
       "get_execution_status": { "status": "ready", "stageId": "build", "actions": [{ "tool": "reopen_stage", "stageId": "test", "reason": "test: Code changed since verification. Run the check again." }] }
+    },
+    {
+      "id": "concise-development-titles",
+      "request": "Plan TITLE-1 for the new Develop review list. The MCP subtask schema includes optional title. Write complete task instructions without making every list row a paragraph.",
+      "expected": [
+        "Use a concise title and full description",
+        "Use one persisted criterion ID, not comma-separated references",
+        "Do not invalidate an existing approved plan merely to rename tasks"
+      ]
+    },
+    {
+      "id": "ide-return-with-live-claim",
+      "request": "I want Resume in Dashboard now, but my IDE still has an unfinished claimed task and a running command. Can resume_execution transfer it?",
+      "expected": [
+        "Stop IDE edits and commands first",
+        "Complete and log only finished work; release own unfinished claim",
+        "Do not release another agent claim",
+        "Wait for or recover platform checks",
+        "Use Dashboard Resume in Dashboard for ownership transfer; stop IDE loop"
+      ]
+    },
+    {
+      "id": "managed-host-applied-changes",
+      "request": "AI Pilot managed execution using Claude Code or OpenCode: implement the supplied task. Contract requires JSON files with path and complete content, null for deletions; host applies changes. File editing tools are unavailable.",
+      "expected": [
+        "Use read tools and return requested structured full file changes",
+        "Do not edit files or execute commands",
+        "Do not invoke interactive MCP loop or poll approval"
+      ]
+    },
+    {
+      "id": "bulk-implementation-revision",
+      "request": "Dashboard batch requested changes to two implementations with a shared comment. Their dependent task also reset; another task remains approved. Continue in IDE after ownership transfer.",
+      "expected": [
+        "Read complete current spec, review history and next actions",
+        "Reclaim ready affected tasks with current attempts",
+        "Preserve still-valid completed work and approved plan; all cleared reports need fresh submission and approval, including unaffected completed tasks",
+        "Resubmit fresh implementation reports and wait for Dashboard approval before TEST"
+      ]
     }
   ]
 }

@@ -414,7 +414,7 @@ capability, as do human review decisions. Pausing fences late output and request
 process cancellation. A retained live child blocks recovery rather than allowing
 a concurrent writer.
 
-## Shared Claude/Codex Specflow skill
+## Shared Codex / Claude Code / OpenCode Specflow skill
 
 The maintained workflow skill is [skills/specflow/SKILL.md](skills/specflow/SKILL.md).
 It follows the MCP's current execution actions, templates, revision approvals,
@@ -428,16 +428,33 @@ python3 scripts/install-specflow-skill.py         # Preview only
 python3 scripts/install-specflow-skill.py --apply # Back up existing skills and link
 ```
 
-Codex discovers `~/.agents/skills/specflow`, linked to this checkout's skill. Claude
-uses `~/.claude/skills/specflow`, linked to the shared location. Existing copies are
-moved into `~/.agents/skill-backups/` or `~/.claude/skill-backups/` before replacement.
-Later edits in the checkout update both clients; keep this checkout available.
-Repeated installation is idempotent. Start a new/reloaded client session for skill
-discovery, and ensure the AI Pilot MCP is separately registered in that client.
+Codex discovers the shared link at ~/.agents/skills/specflow. Claude Code uses
+~/.claude/skills/specflow and OpenCode uses ~/.config/opencode/skills/specflow;
+both link through the shared location to this checkout's skills/specflow directory.
+OpenCode respects XDG_CONFIG_HOME when installing for the current user; override
+its configuration directory with --opencode-config-dir when needed. Only this
+skill is installed; MCP and model configuration are separate.
 
-Invoke in Claude with `/specflow TICKET-ID description`, or in Codex with
-`$specflow TICKET-ID description`. Natural-language requests to use Specflow also
-match the skill. No workflow is started by installing it.
+Existing directories and broken/old links are backed up under each client's
+skill-backups directory before replacement. A failed installation restores all
+replaced links. Repeated installation is idempotent. Keep the source checkout and
+branch available: switching to a branch without the skill or removing a temporary
+worktree breaks every linked client. Prefer a stable team checkout for daily use:
+
+~~~bash
+python3 ~/Project/Giant-Panda-AI-Tools-main/mcp/specflow-mcp/scripts/install-specflow-skill.py --apply
+~~~
+
+In the team repository, the top-level skills/specflow entry links relatively to
+mcp/specflow-mcp/skills/specflow. Edit the component skill, not a separate client
+copy; the team skill installer and component installer resolve to the same source.
+Synchronize this component directory when releasing changes to the team repository.
+
+Start a new/reloaded client session after updating the skill; existing sessions
+may retain instructions already loaded. Invoke in Claude with /specflow TICKET-ID,
+or in Codex with $specflow TICKET-ID. OpenCode uses its native skill loader or a
+natural-language request to use Specflow; installation does not create a slash
+command. No workflow is started by installing it.
 
 Installer tests: `python3 -m unittest discover -s tests/skills -p test_install_specflow.py`.
 Behavioral evaluation scenarios are in `tests/skills/specflow-scenarios.json`; run

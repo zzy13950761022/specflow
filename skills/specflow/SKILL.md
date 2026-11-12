@@ -11,7 +11,11 @@ description: >-
 
 Use AI Pilot's persisted workflow state to drive work through reviewed stages.
 Read state before deciding what to do; approval, implementation, and advancement
-are separate operations. The same instructions apply to Claude Code and Codex.
+are separate operations. The same workflow applies to Codex, Claude Code and
+OpenCode. Use each client's native skill invocation; OpenCode can load
+`skill({name: "specflow"})` or use a natural-language request. Installing this skill
+does not create a slash command in clients that do not support one. Resolve
+supporting files relative to this skill's directory.
 
 ## Managed Dashboard execution
 
@@ -22,7 +26,13 @@ submission, claims, implementation logging, checks and stage advancement; MCP
 tools are intentionally absent in this mode. Do not run the interactive loop,
 poll approval, self-approve, or ask the user to type a continuation message.
 Read repository instructions and use the supplied approved context. Artifact
-turns are read-only; implementation turns write only in their assigned worktree.
+turns are read-only. In the current managed Codex runner, implementation turns may
+edit only their assigned worktree when the supplied contract permits it. Managed
+Claude Code and OpenCode turns use read tools and return the supplied structured
+file changes: repository-relative paths and COMPLETE UTF-8 contents (null for
+deletion). The host validates and applies those changes. They must not edit files
+or run commands themselves. Follow the supplied contract and schema for the
+active adapter; never infer write permission from the agent's name alone.
 Human decisions stay in Dashboard, including completed-subtask review before
 TEST. A workflow decision does not authorize command escalation or deployment.
 
@@ -60,6 +70,16 @@ the SAP extensibility plugin-service repository, also read
 do not apply to AI Pilot's own TypeScript repository or unrelated projects.
 
 ## Follow execution state
+
+To return IDE work to Dashboard, first stop IDE edits and commands. Finish and
+validly log completed work, then complete its current claim; release your own
+unfinished claims instead of marking unfinished work done. Let active platform
+checks finish or use the supported recovery flow for interrupted checks. Never
+release another agent's live claim. Reread state, then have the user use
+**Resume in Dashboard**. `resume_execution` resumes platform execution state; it
+does not transfer ownership to Dashboard. Once Dashboard owns the ticket, stop
+the interactive IDE loop. Copying context or an old approval is not an ownership
+transfer in either direction.
 
 Use `get_execution_status` and its structured `actions`, refreshed after mutations,
 as the next-step guide. Combine each action with the current spec, user request,
@@ -123,11 +143,18 @@ within the user's explicit authorization.
 ## DEVELOP: approved plan, then implementation
 
 Before coding, register a nonempty plan with `set_develop_subtasks`: use stable IDs,
-descriptions, `dependsOn`, and repository-relative `files` declarations. Link each
+descriptions, `dependsOn`, and repository-relative `files` declarations. When the
+tool schema supports `title`, provide a short, meaningful task name (prefer under
+60 characters); keep full instructions in `description`. Preserve existing task
+IDs and titles when updating a plan. Do not rewrite an approved plan just to
+shorten task names: older tasks display a shortened description automatically. Link each
 task to one acceptance criterion ID using `requirementRef`; use `testRefs` for
 planned/actual tests. Register referenced criteria in SPEC first. Submit the plan
 with `record_ai_output` and wait for its current revision to be approved. Changing
 the task list invalidates plan approval.
+Use exactly one persisted criterion ID per `requirementRef`, never comma-separated
+IDs or ranges. For existing tickets without criteria, omit the optional reference
+or use the empty value permitted by the supplied schema; do not invent IDs.
 
 After plan approval, implement outstanding tasks; do not immediately advance or
 submit another DEVELOP artifact. For each task:
@@ -163,6 +190,20 @@ tasks using their new attempt. Follow `advance_stage` only after valid approvals
 approved plan artifact intact; implementation logs provide the completion record.
 Use `get_traceability` before integration review to find missing requirement/file/
 test links. Do not invent references to make the traceability report look complete.
+
+Dashboard supports **Review all reports**, **Approve all pending**, **Revise all
+pending**, and **Reject all pending**, as well as individual review. Only the
+human uses these review controls; never call browser/HTTP approval routes on their
+behalf. After any batch decision, reread the entire task list, current reviews,
+review history and next actions. Batch revision/rejection uses a shared comment
+and resets affected tasks and their dependents for rework. Reclaim only ready
+tasks using their returned attempts, preserve still-valid completed work, keep
+the approved plan, and submit fresh implementation reports after rework. A batch
+decision applies to the reviewed report versions, not future reports or code.
+Preserving completed work does not preserve its approval: batch revision/rejection
+clears all current task reviews, including tasks whose completion remains valid.
+After rework, resubmit all missing reports and wait for fresh approvals as required
+by the returned state; do not redo unaffected code just to recreate its report.
 
 ## TEST and BUILD: platform evidence
 
