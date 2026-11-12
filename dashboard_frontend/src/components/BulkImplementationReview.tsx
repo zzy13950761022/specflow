@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { taskTitle } from '../lib/implementation-report';
+import { ImplementationReportContent } from './ImplementationReportContent';
 import { api } from '../api';
 import type { Subtask } from '../types';
 import { Dialog } from './Dialog';
@@ -51,7 +52,7 @@ export function BulkImplementationReview({ repoId, ticketId, tasks, canReview }:
         {reports?.length === 0 && <p>No implementation reports are available.</p>}
         {reports?.map(report => <article key={report.review.id} className="border-b border-blue-100 pb-4">
           <p className="text-xs text-slate-500">{report.subtaskId} · {report.review.status.replaceAll('_', ' ')}</p>
-          <div className="md-body"><ReactMarkdown>{report.content}</ReactMarkdown></div>
+          <h3 className="text-sm font-semibold">{taskTitle(tasks.find(task => task.id === report.subtaskId) ?? report)}</h3><ImplementationReportContent content={report.content} />
         </article>)}
       </div>
       <div className="dialog-footer bg-white border-t border-blue-100 px-6 py-4 space-y-3">

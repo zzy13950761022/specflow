@@ -255,6 +255,7 @@ export class StageMachine {
       if (stage.subtasks?.some((task) => task.status === 'running')) throw new Error('Release running tasks before replacing the plan.');
       stage.subtasks = inputs.map((t) => ({
         id: t.id ?? randomUUID(),
+        title: t.title,
         description: t.description,
         completed: false,
         prompt: t.prompt,

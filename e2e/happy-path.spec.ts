@@ -206,16 +206,15 @@ test('completed implementation is revised and approved in Dashboard before TEST'
     await fs.writeFile(join(repo, 'source.ts'), 'export const validation = false;');
     await log('Initial validation implementation');
     await expect(page.getByRole('button', { name: 'Advance stage', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Read implementation report', exact: true }).click();
     await expect(page.getByText('export const validation = false;', { exact: true })).toBeVisible();
-    await page.getByLabel('Implementation review comment for Implement validation').fill('Enable validation');
     await page.getByRole('button', { name: 'Revise implementation', exact: true }).click();
+    await page.getByLabel('Implementation review comment', { exact: true }).fill('Enable validation');
+    await page.getByRole('button', { name: 'Confirm revision', exact: true }).click();
     await expect.poll(async () => (await (await page.request.get(url)).json()).stages[3].subtasks[0].completed).toBe(false);
     await fs.writeFile(join(repo, 'source.ts'), 'export const validation = true;');
     await log('Enabled validation');
-    await page.getByRole('button', { name: 'Read implementation report', exact: true }).click();
     await expect(page.getByText('export const validation = true;', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Approve implementation', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve & next', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Advance stage', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Advance stage', exact: true }).click();
     await expect.poll(async () => (await (await page.request.get(url)).json()).currentStageId).toBe('test');
@@ -673,3 +672,70 @@ for (const verdict of ['approved', 'needs_revision', 'rejected'] as const) {
     } finally { await client.close(); }
   });
 }
+
+test('development workspace keeps reports readable, ignores late reads and approves the next task', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const repoId = (await (await page.request.post('/api/repos', { data: { path: repo } })).json()).id;
+  const ticketId = 'E2E-WORKSPACE';
+  const url = '/api/repos/' + repoId + '/specs/' + ticketId;
+  const client = await mcpClient();
+  const tool = async (name: string, args: Record<string, unknown>) => {
+    expect((await client.callTool({ name, arguments: { repoId, ticketId, ...args } })).isError).not.toBe(true);
+  };
+  const state = async () => (await page.request.get(url)).json();
+  let releaseA!: () => void;
+  let requestedA!: () => void;
+  const holdA = new Promise<void>(resolve => { releaseA = resolve; });
+  const startedA = new Promise<void>(resolve => { requestedA = resolve; });
+  try {
+    await tool('create_spec', { title: 'Readable implementation review', workflowKind: 'bugfix' });
+    await tool('record_ai_output', { stageId: 'spec', content: 'Shipping requirements' });
+    await page.goto(url.replace('/api', ''));
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(async () => (await state()).stages[0].gate.status).toBe('approved');
+    await tool('advance_stage', { stageId: 'spec' });
+    const description = 'Validate shipping. ' + 'Full task requirements remain available without becoming a report heading. '.repeat(15);
+    await tool('set_develop_subtasks', { subtasks: [{ id: 'A', title: 'Shipping validation', description, files: ['source.ts'] }, { id: 'B', title: 'Boundary tests', description: 'Cover shipping boundaries', files: ['source.ts'], dependsOn: ['A'] }] });
+    await tool('record_ai_output', { stageId: 'develop', content: 'Approved development plan' });
+    await page.getByRole('button', { name: 'Select DEVELOP', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(async () => (await state()).stages[3].gate.status).toBe('approved');
+    await page.route('**/develop/review?subtaskId=A', async route => { requestedA(); await holdA; await route.continue(); });
+    for (const id of ['A', 'B']) {
+      await tool('log_implementation', { subtaskId: id, summary: 'Summary for ' + id, filesModified: ['source.ts'], filesCreated: [], statistics: { linesAdded: 1, linesRemoved: 0 }, artifacts: {} });
+      await tool('set_subtask_completed', { subtaskId: id, completed: true });
+    }
+    await tool('submit_implementation_review', {});
+    await startedA;
+    await page.getByRole('button', { name: 'Select task Boundary tests', exact: true }).click();
+    const detail = page.getByRole('region', { name: 'Selected task detail' });
+    await expect(detail.getByText('Summary for B', { exact: true })).toBeVisible();
+    const lateResponse = page.waitForResponse(response => response.url().endsWith('/develop/review?subtaskId=A'));
+    releaseA();
+    await lateResponse;
+    await expect(detail.getByRole('heading', { name: 'Boundary tests', exact: true })).toBeVisible();
+    await expect(detail.getByText('Summary for A', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Select task Shipping validation', exact: true }).click();
+    await expect(detail.getByText('Summary for A', { exact: true })).toBeVisible();
+    await expect(detail.locator('.implementation-technical pre')).not.toBeVisible();
+    await detail.getByRole('tab', { name: 'Task requirements', exact: true }).click();
+    await expect(detail.getByText(description, { exact: true })).toBeVisible();
+    await detail.getByRole('tab', { name: 'Implementation report', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Select DEVELOP' })).toHaveAttribute('title', /implementation review incomplete/);
+    await page.screenshot({ path: '/private/tmp/ai-pilot-develop-workspace.png', fullPage: true });
+    await detail.getByRole('button', { name: 'Approve & next', exact: true }).click();
+    await expect(detail.getByRole('heading', { name: 'Boundary tests', exact: true })).toBeVisible();
+    await expect.poll(async () => (await state()).stages[3].subtasks[0].review.status).toBe('approved');
+    expect((await state()).stages[3].subtasks[1].review.status).toBe('pending_review');
+    await page.getByRole('button', { name: 'Pending review 1', exact: true }).click();
+    await expect(page.locator('.develop-task-row')).toHaveCount(1);
+    await page.getByLabel('Search development tasks').fill('no matching task');
+    await expect(page.getByText('No tasks match your filters.')).toBeVisible();
+    await page.getByLabel('Search development tasks').fill('');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const action = await detail.getByRole('button', { name: 'Approve & next', exact: true }).boundingBox();
+    expect(action!.y + action!.height).toBeLessThanOrEqual(720);
+    await page.setViewportSize({ width: 600, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(600);
+  } finally { releaseA(); await client.close(); }
+});

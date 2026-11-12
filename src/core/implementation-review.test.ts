@@ -12,7 +12,7 @@ beforeEach(async () => {
   app = new AppCore(); repoId = (await app.addRepo(repo)).id;
   await app.createSpec(repoId, 'REV-1', 'Review implementation');
   await prepareStage(app, repo, repoId, 'REV-1', 'develop');
-  await app.setDevelopSubtasks(repoId, 'REV-1', [{ id: 'A', description: 'Implement API' }]);
+  await app.setDevelopSubtasks(repoId, 'REV-1', [{ id: 'A', title: 'API implementation', description: 'Implement API' }]);
   await prepareImplementation(app, repoId, 'REV-1');
   await recordTaskLog(app, repoId, 'REV-1', 'A');
   await app.setSubtaskCompleted(repoId, 'REV-1', 'A', true);
@@ -27,6 +27,7 @@ it('binds human review to its immutable report and source fingerprint', async ()
   const submitted = await app.submitImplementationReview(repoId, 'REV-1');
   const review = submitted.stages[3].subtasks![0].review!;
   expect(review.status).toBe('pending_review');
+  expect(submitted.stages[3].subtasks![0].title).toBe('API implementation');
   const report = await app.getImplementationReview(repoId, 'REV-1', 'A');
   expect(report.content).toContain('Fixture implementation');
   await expect(app.reviewImplementation(repoId, 'REV-1', 'A', 'wrong', 'approved')).rejects.toThrow(/changed|review/i);
@@ -52,7 +53,7 @@ it('revision resets implementation, preserves review history, and invalidates ol
 });
 
 async function submitTwoReports() {
-  await app.setDevelopSubtasks(repoId, 'REV-1', [{ id: 'A', description: 'Implement API' }, { id: 'B', description: 'Implement tests', dependsOn: ['A'] }]);
+  await app.setDevelopSubtasks(repoId, 'REV-1', [{ id: 'A', title: 'API implementation', description: 'Implement API' }, { id: 'B', description: 'Implement tests', dependsOn: ['A'] }]);
   await prepareImplementation(app, repoId, 'REV-1');
   for (const id of ['A', 'B']) {
     await recordTaskLog(app, repoId, 'REV-1', id);

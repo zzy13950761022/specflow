@@ -85,13 +85,14 @@ export function StagePanel({
     };
   }, [repoId, ticketId, stage.id, stage.aiStatus, stage.gate.status, stage.revision, stage.stale, onReviewReady]);
 
+  const developWorkspace = stage.id === 'develop' && stage.gate.status === 'approved' && !stage.stale && !!stage.subtasks?.length;
   const markdownMetrics = artifact?.kind === 'markdown' ? artifact.metrics : undefined;
 
   return (
-    <div className="glass rounded-xl flex flex-col gap-2 p-3 min-h-full">
+    <div className={"glass rounded-xl flex flex-col gap-2 p-3 " + (developWorkspace ? "develop-stage-panel" : "min-h-full")}>
       <IdeHandoff profileId={agentProfileId} repoId={repoId} spec={spec} onDone={onDone} />
       {/* header: stage label + aiStatus + gateStatus + artifact kind + comment */}
-      <div className="flex items-center gap-2 flex-wrap border-b border-blue-100 pb-2">
+      {!developWorkspace && <div className="flex items-center gap-2 flex-wrap border-b border-blue-100 pb-2">
         <span className="font-semibold text-sm">{STAGE_LABELS[stage.id]}</span>
         <span
           className={`text-[11px] rounded-full px-2 py-0.5 ${AI_STATUS_STYLES[stage.aiStatus]}`}
@@ -103,7 +104,7 @@ export function StagePanel({
           className={`text-[11px] rounded-full px-2 py-0.5 ${GATE_STYLES[stage.gate.status]}`}
           title="Gate status"
         >
-          Gate: {stage.gate.status.replace(/_/g, ' ')}
+          {stage.id === 'develop' ? 'Plan' : 'Gate'}: {stage.gate.status.replace(/_/g, ' ')}
         </span>
         <span className="text-[11px] text-slate-500 ml-auto">Revision {stage.revision}{stage.gate.actor === 'policy' ? ' · approved by check policy' : ''}</span>
         {artifact && (
@@ -117,7 +118,7 @@ export function StagePanel({
               "{stage.gate.comment}"
             </span>
           )}
-      </div>
+      </div>}
 
       {/* body */}
       {stage.skipped && <p className="rounded-lg bg-slate-100 p-3 text-sm">Skipped: {stage.skipReason}</p>}
@@ -131,7 +132,7 @@ export function StagePanel({
           {stage.evidence.codeChanged && <span className="text-red-600">Code changed during execution; run again.</span>}
         </div>
       )}
-      <div className="flex-1">
+      <div className={developWorkspace ? "develop-stage-body" : "flex-1"}>
         {loading && <p className="text-sm text-slate-500">Loading…</p>}
         {err && <p className="text-sm text-red-600">{err}</p>}
         {!loading && !err && content === null && (
@@ -205,6 +206,7 @@ function StageBody({
 
   switch (stageId) {
     case 'develop':
+      if (spec.stages[3].gate.status === 'approved' && !spec.stages[3].stale && spec.stages[3].subtasks?.length) return <DevelopSubtasks repoId={repoId} spec={spec} planContent={content} />;
       return (
         <div className="flex flex-col gap-4">
           <MarkdownOrAnnotatable

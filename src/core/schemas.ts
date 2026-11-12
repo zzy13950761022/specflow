@@ -69,6 +69,7 @@ export const ImplementationReviewSchema = z.object({
 /** DEVELOP sub-task. Phase 3 makes this real: ordered checklist, individually checkable. */
 export const SubtaskSchema = z.object({
   id: z.string(),
+  title: z.string().trim().min(1).max(120).optional(),
   description: z.string(),
   completed: z.boolean().default(false),
   /** Per-subtask AI guidance shown when Claude works on this item. */
@@ -88,7 +89,7 @@ export const SubtaskSchema = z.object({
 });
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export const SubtaskInputSchema = z.object({
-  id: z.string().min(1).optional(), description: z.string().min(1), prompt: z.string().optional(),
+  id: z.string().min(1).optional(), title: z.string().trim().min(1).max(120).optional(), description: z.string().min(1), prompt: z.string().optional(),
   requirementRef: z.string().optional(), leverage: z.array(z.string()).optional(), testRefs: z.array(z.string()).optional(),
   dependsOn: z.array(z.string()).optional(), files: z.array(z.string()).optional(),
 });

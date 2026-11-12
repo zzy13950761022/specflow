@@ -158,13 +158,13 @@ export function SpecDetailPage() {
           />
         ) : (
           <div className="flex items-center gap-2 text-sm text-slate-500">
-            <span>Gate:</span>
+            <span>{selectedStageId === 'develop' ? 'Development plan:' : 'Gate:'}</span>
             <span className={`rounded-full px-2 py-0.5 text-[11px] ${GATE_STYLES[selectedStage.gate.status]}`}>
               {selectedStage.gate.status.replace(/_/g, ' ')}
             </span>
             <span className="text-[11px] opacity-70">
               {selectedStage.gate.status === 'approved'
-                ? 'This stage is approved.'
+                ? selectedStageId === 'develop' ? 'Plan approved. Implementation reports require separate review before TEST.' : 'This stage is approved.'
                 : 'No review pending for this stage.'}
             </span>
           </div>

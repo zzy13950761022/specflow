@@ -135,6 +135,15 @@ The develop stage has an explicit plan-before-code structure:
    implementation report before entering TEST. Reports bind the plan revision,
    task attempt and source fingerprint; changed code invalidates old approvals.
 
+After plan approval, DEVELOP opens a split review workspace: a searchable task
+list with status filters on the left, and the selected report on the right.
+**Approve & next** moves to the next pending report. Task requirements and review
+history have separate tabs; **View development plan** opens the approved plan.
+Reports emphasize the summary and file changes, with the original report,
+fingerprint and logs available under **Technical details**. Tasks can provide an
+optional short `title`; older tasks use a shortened description in the list while
+keeping their full instructions in **Task requirements**.
+
 **Review all reports** opens the implementation reports together. After reading,
 use **Approve all pending**, **Revise all pending**, or **Reject all pending**.
 Revision and rejection require one shared comment and reset the selected tasks

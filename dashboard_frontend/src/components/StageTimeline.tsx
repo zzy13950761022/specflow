@@ -36,10 +36,11 @@ export function StageTimeline({
         {spec.stages.map((stage, index) => {
           const isSelected = stage.id === selectedStageId;
           const isActive = stage.id === activeStageId;
-          const approved = stage.gate.status === 'approved';
+          const implementationPending = stage.id === 'develop' && stage.gate.status === 'approved' && !!stage.subtasks?.some(task => !task.completed || task.review?.status !== 'approved');
+          const approved = stage.gate.status === 'approved' && !implementationPending;
           const rejected = stage.gate.status === 'rejected';
           const revision = stage.stale || stage.gate.status === 'needs_revision';
-          const status = stage.skipped ? 'skipped' : stage.stale ? 'outdated' : stage.gate.status.replaceAll('_', ' ');
+          const status = implementationPending ? 'implementation review incomplete' : stage.skipped ? 'skipped' : stage.stale ? 'outdated' : stage.gate.status.replaceAll('_', ' ');
           const symbol = stage.skipped ? '−' : revision ? '↩' : approved ? '✓' : rejected ? '✗' : stage.gate.status === 'pending_review' ? '…' : index + 1;
           return <button key={stage.id} onClick={() => onSelectStage(stage.id)}
             aria-label={'Select ' + STAGE_LABELS[stage.id]} aria-pressed={isSelected} aria-current={isActive ? 'step' : undefined}
