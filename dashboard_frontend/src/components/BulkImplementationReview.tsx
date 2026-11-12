@@ -43,7 +43,7 @@ export function BulkImplementationReview({ repoId, ticketId, tasks, canReview }:
 
   if (!reviewedTasks.length) return null;
   return <>
-    <button className="rounded-lg bg-blue-100 px-3 py-2 text-sm self-start" onClick={() => { setOpen(true); setNotice(''); setComment(''); void load(); }}>Review all reports ({reviewedTasks.length})</button>
+    <button className="rounded-lg bg-blue-100 px-3 py-2 text-sm" onClick={() => { setOpen(true); setNotice(''); setComment(''); void load(); }}>Review all reports ({reviewedTasks.length})</button>
     {notice && <p role="status" className="text-sm text-blue-700">{notice}</p>}
     {open && <Dialog title="Implementation reports" busy={busy} onClose={() => setOpen(false)}>
       <div className="dialog-body px-6 py-4 space-y-5">

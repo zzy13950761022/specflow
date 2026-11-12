@@ -207,11 +207,35 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 
-/* DEVELOP review workspace: independent task/report scrolling with visible actions. */
+/* The stage scrolls the handoff away; task navigation and review actions stay visible. */
+.stage-content {
+  container-type:size;
+}
 .develop-stage-panel {
-  height:100%;
-  min-height:0;
-  overflow:hidden;
+  height:auto;
+  min-height:100%;
+  overflow:visible;
+}
+.develop-stage-panel .develop-workspace,
+.develop-stage-panel .implementation-detail-body {
+  overflow:visible;
+}
+.develop-stage-panel .develop-task-list {
+  position:sticky;
+  top:0;
+  max-height:100cqh;
+  align-self:start;
+}
+.develop-stage-panel .implementation-detail-head {
+  position:sticky;
+  top:0;
+  background:white;
+  z-index:1;
+}
+.develop-stage-panel .implementation-review-footer {
+  position:sticky;
+  bottom:0;
+  z-index:2;
 }
 .develop-stage-body {
   flex:1;
@@ -688,6 +712,15 @@ button:disabled { cursor: not-allowed; }
   }
 }
 @media(max-width:700px) {
+  .develop-stage-panel .develop-task-list {
+    position:static;
+    max-height:270px;
+    align-self:stretch;
+  }
+  .develop-stage-panel .implementation-detail {
+    height:auto;
+    min-height:560px;
+  }
   .develop-stage-panel {
     height:auto;
     min-height:100%;

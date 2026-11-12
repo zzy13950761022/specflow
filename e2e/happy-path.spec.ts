@@ -735,6 +735,18 @@ test('development workspace keeps reports readable, ignores late reads and appro
     await page.setViewportSize({ width: 1280, height: 720 });
     const action = await detail.getByRole('button', { name: 'Approve & next', exact: true }).boundingBox();
     expect(action!.y + action!.height).toBeLessThanOrEqual(720);
+    // A long report scrolls the handoff out of view while review controls stay accessible.
+    await page.getByRole('button', { name: 'All 2', exact: true }).click();
+    await page.getByRole('button', { name: 'Select task Shipping validation', exact: true }).click();
+    await detail.getByRole('tab', { name: 'Task requirements', exact: true }).click();
+    const stageContent = page.getByRole('region', { name: 'Stage content', exact: true });
+    await stageContent.evaluate(element => { element.scrollTop = 250; });
+    await expect(page.getByRole('button', { name: 'Copy context', exact: true })).not.toBeInViewport();
+    await expect(detail.getByRole('button', { name: 'Next task', exact: true })).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Select task Boundary tests', exact: true })).toBeInViewport();
+    await page.getByRole('button', { name: 'Select task Boundary tests', exact: true }).click();
+    await expect(detail.getByRole('heading', { name: 'Boundary tests', exact: true })).toBeInViewport();
+    await expect(detail.getByRole('button', { name: 'Approve & next', exact: true })).toBeInViewport();
     await page.setViewportSize({ width: 600, height: 800 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(600);
   } finally { releaseA(); await client.close(); }

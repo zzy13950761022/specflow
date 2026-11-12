@@ -127,7 +127,7 @@ export function SpecDetailPage() {
       </div>
 
       {/* middle: scrollable stage panel */}
-      <div ref={panelRef} role="region" aria-label="Stage content" tabIndex={0} className="flex-1 min-h-0 overflow-auto rounded-xl">
+      <div ref={panelRef} role="region" aria-label="Stage content" tabIndex={0} className="stage-content flex-1 min-h-0 overflow-auto rounded-xl">
         <StagePanel
           key={repoId + ":" + ticketId + ":" + selectedStage.id + ":" + selectedStage.revision}
           onReviewReady={setReview}

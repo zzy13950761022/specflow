@@ -36,7 +36,16 @@ export function ImplementationReview({ repoId, ticketId, task, spec, position, t
     if (task.review) void load();
     return () => { request.current++; };
   }, [repoId, ticketId, task.id, task.review?.id]);
-  useEffect(() => { body.current?.scrollTo({ top: 0 }); }, [tab]);
+  useEffect(() => {
+    body.current?.scrollTo({ top: 0 });
+    // Switching tasks/tabs starts at the report header without bringing the handoff back.
+    const detail = body.current?.closest('.implementation-detail');
+    const scroller = detail?.closest('.stage-content');
+    if (detail && scroller) {
+      const offset = detail.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      if (offset < 0) scroller.scrollTop += offset;
+    }
+  }, [tab]);
   const current = report?.review.id === task.review?.id && report?.review.status === task.review?.status;
   const canReview = current && task.review?.status === 'pending_review' && spec.currentStageId === 'develop';
   const criterion = spec.acceptanceCriteria.find(item => item.id === task.requirementRef);
