@@ -19,7 +19,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   else if (x.method === 'turn/start') {
     if (process.env.PILOT_FIXTURE_MODE === 'hang') { send({ id: x.id, result: { turn: { id: 'turn-one' } } }); return; }
     if (process.env.PILOT_FIXTURE_MODE === 'invalid') { process.stdout.write('not-json' + String.fromCharCode(10)); return; }
-    if (process.env.PILOT_FIXTURE_MODE === 'workflow') {
+    if (['workflow', 'plan-retry'].includes(process.env.PILOT_FIXTURE_MODE)) {
       const prompt = x.params.input[0].text;
       let output;
       if (prompt.includes('Implement this claimed task:')) {
@@ -29,6 +29,10 @@ createInterface({ input: process.stdin }).on('line', (line) => {
         output = { content: 'Generated stage artifact', subtasks: [], acceptanceCriteria: [], logsSanitized: true, checklistItems: [] };
         if (prompt.includes('; stage: spec;')) output.acceptanceCriteria = [{ id: 'AC-1', given: 'a repository', when: 'implemented', then: 'source exists' }];
         if (prompt.includes('; stage: develop;')) output.subtasks = [{ id: 'A', description: 'Implement source', dependsOn: [], files: ['source.ts'], requirementRef: 'AC-1', testRefs: [] }];
+        if (process.env.PILOT_FIXTURE_MODE === 'plan-retry') {
+          const refs = x.params.outputSchema.properties.subtasks.items.properties.requirementRef.enum ?? ['AC-1, AC-2'];
+          output.subtasks = refs.map((ref, i) => ({ id: 'TASK-' + i, description: 'Implement criterion', dependsOn: [], files: ['source.ts'], requirementRef: ref, testRefs: [] }));
+        }
       }
       send({ id: x.id, result: { turn: { id: 'turn-one' } } });
       send({ method: 'turn/completed', params: { threadId: x.params.threadId, turn: { id: 'turn-one', status: 'completed', items: [{ type: 'agentMessage', phase: 'final_answer', text: JSON.stringify(output) }] } } });

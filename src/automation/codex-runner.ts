@@ -4,7 +4,7 @@ import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
 import { AppCore } from '../core/app-core.js';
-import { SpecFileSchema, SubtaskInputSchema } from '../core/schemas.js';
+import { SpecFileSchema, SubtaskInputSchema, type SpecFile } from '../core/schemas.js';
 import { runAgentTurn } from './agent-adapters.js';
 import { applySourceChanges, sourceOutputSchema } from './source-changes.js';
 import { fingerprint } from '../core/check-runner.js';
@@ -18,16 +18,18 @@ const artifactResult = z.object({
   acceptanceCriteria: SpecFileSchema.shape.acceptanceCriteria,
   logsSanitized: z.boolean().default(false), checklistItems: z.array(z.object({ description: z.string().min(1), checked: z.boolean() })).default([]),
 });
-const artifactOutputSchema = {
-  type: 'object', additionalProperties: false,
-  required: ['content', 'subtasks', 'acceptanceCriteria', 'logsSanitized', 'checklistItems'],
-  properties: {
-    content: { type: 'string' }, logsSanitized: { type: 'boolean' },
-    subtasks: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'description', 'dependsOn', 'files', 'requirementRef', 'testRefs'], properties: { id: { type: 'string' }, description: { type: 'string' }, dependsOn: { type: 'array', items: { type: 'string' } }, files: { type: 'array', items: { type: 'string' } }, requirementRef: { type: 'string' }, testRefs: { type: 'array', items: { type: 'string' } } } } },
-    acceptanceCriteria: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'given', 'when', 'then'], properties: { id: { type: 'string' }, given: { type: 'string' }, when: { type: 'string' }, then: { type: 'string' } } } },
-    checklistItems: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['description', 'checked'], properties: { description: { type: 'string' }, checked: { type: 'boolean' } } } },
-  },
-};
+function artifactOutputSchema(acceptanceCriteria: SpecFile['acceptanceCriteria']) {
+  return {
+    type: 'object', additionalProperties: false,
+    required: ['content', 'subtasks', 'acceptanceCriteria', 'logsSanitized', 'checklistItems'],
+    properties: {
+      content: { type: 'string' }, logsSanitized: { type: 'boolean' },
+      subtasks: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'description', 'dependsOn', 'files', 'requirementRef', 'testRefs'], properties: { id: { type: 'string' }, description: { type: 'string' }, dependsOn: { type: 'array', items: { type: 'string' } }, files: { type: 'array', items: { type: 'string' } }, requirementRef: { type: 'string', enum: acceptanceCriteria.length ? acceptanceCriteria.map(criterion => criterion.id) : [''], description: 'Exactly one existing acceptance criterion ID, never a comma-separated list or range. Empty only when the ticket has no acceptance criteria.' }, testRefs: { type: 'array', items: { type: 'string' } } } } },
+      acceptanceCriteria: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'given', 'when', 'then'], properties: { id: { type: 'string' }, given: { type: 'string' }, when: { type: 'string' }, then: { type: 'string' } } } },
+      checklistItems: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['description', 'checked'], properties: { description: { type: 'string' }, checked: { type: 'boolean' } } } },
+    },
+  };
+}
 const implementationOutputSchema = { type: 'object', additionalProperties: false, required: ['summary'], properties: { summary: { type: 'string' } } };
 function lineChanges(before: Buffer | null, after: Buffer | null) {
   const lines = (value: Buffer | null) => value?.length ? value.toString('utf8').split(String.fromCharCode(10)) : [];
@@ -77,6 +79,7 @@ export function createCodexExecutor(app: AppCore, command = process.env.AI_PILOT
         'This managed execution contract takes precedence over the interactive Specflow loop. Read repository AGENTS.md/CLAUDE.md.',
         'Ticket: ' + ticketId + '; stage: ' + spec.currentStageId + '; workspace: ' + worktree,
         task ? 'Implement this claimed task: ' + JSON.stringify(task) + '. Previous review: ' + JSON.stringify(task.reviewHistory?.at(-1) ?? null) : 'Generate the stage artifact. For DEVELOP return a nonempty task plan with stable IDs linked to SPEC acceptance criteria. Return empty arrays for irrelevant structured fields.',
+        spec.currentStageId === 'develop' && !task ? 'Each subtask requirementRef must be exactly one of these persisted acceptance criterion IDs: ' + JSON.stringify(spec.acceptanceCriteria.map(criterion => criterion.id)) + '. Never join IDs with commas or use ranges. Plan appropriately scoped tasks linked to individual criteria. If no criteria exist, use an empty string; do not invent IDs.' : '',
         task ? 'Approved plan: ' + await app.readArtifact(repoId, ticketId, 'develop') : '',
         'Current review comment: ' + (spec.stages.find((stage) => stage.id === spec.currentStageId)?.gate.comment ?? ''),
         'Actual current-stage platform evidence: ' + JSON.stringify(spec.stages.find((stage) => stage.id === spec.currentStageId)?.evidence ?? null),
@@ -86,7 +89,7 @@ export function createCodexExecutor(app: AppCore, command = process.env.AI_PILOT
       const { text: output } = await runAgentTurn({
         profile, cwd: worktree, runtime: profile.agent === 'codex' ? runtime : join(runtime, profile.agent),
         prompt: instructions + (hostApplied && implementation ? String.fromCharCode(10) + 'Read the current source using read tools. Return files with repository-relative path and COMPLETE new UTF-8 content (null to delete). The host validates and applies them. Do not edit files or run commands yourself.' : ''),
-        schema: implementation ? (hostApplied ? sourceOutputSchema : implementationOutputSchema) : artifactOutputSchema,
+        schema: implementation ? (hostApplied ? sourceOutputSchema : implementationOutputSchema) : artifactOutputSchema(spec.acceptanceCriteria),
         signal, sessionId: spec.automation?.threadId, writable: implementation, skillPath, authPath,
         onPid: async pid => { ownedPid = pid; await app.updateAutomation(repoId, ticketId, current => { app.assertAutomationRun(current, runId); current.automation!.runnerPid = pid; }); },
         onSession: async session => { await app.updateAutomation(repoId, ticketId, current => { app.assertAutomationRun(current, runId); current.automation!.threadId = session; }); },

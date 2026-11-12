@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -38,4 +38,47 @@ it('drives a ticket through plan and implementation reviews into real worktree c
     const checked = (await app.getSpec(id, 'AUTO-1'))!;
     expect(checked.stages[4].evidence?.exitCode).toBe(0); expect(checked.stages[4].evidence?.coverage).toBe(0.9);
   } finally { await service.stop(); delete process.env.AI_PILOT_HOME; delete process.env.PILOT_FIXTURE_MODE; await fs.rm(root, { recursive: true, force: true }); }
+});
+
+
+it.each([{ name: 'persisted acceptance IDs', ids: ['AC-1', 'AC-2', 'AC-3', 'AC-4', 'AC-5', 'AC-6', 'AC-7', 'AC-8', 'AC-9'] }, { name: 'legacy ticket without criteria', ids: [] }])('retries a failed plan with $name and waits for human review', async ({ ids }) => {
+  const root = await fs.mkdtemp(join(tmpdir(), 'codex-plan-retry-'));
+  const repo = join(root, 'repo');
+  vi.stubEnv('AI_PILOT_HOME', join(root, 'home'));
+  vi.stubEnv('PILOT_FIXTURE_MODE', 'plan-retry');
+  await fs.mkdir(repo);
+  execFileSync('git', ['init', '-q', repo]);
+  execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--allow-empty', '-qm', 'Initial']);
+  const command = join(root, 'codex-fixture');
+  const configPath = join(root, 'config.toml');
+  await fs.writeFile(configPath, '');
+  await fs.writeFile(command, '#!' + process.execPath + '\n' + await fs.readFile(fileURLToPath(new URL('./fixtures/codex-server.mjs', import.meta.url)), 'utf8'), { mode: 0o700 });
+  const app = new AppCore();
+  const repoId = (await app.addRepo(repo)).id;
+  const service = new Orchestrator(app, createCodexExecutor(app, command, join(root, 'no-auth.json'), configPath));
+  try {
+    await app.createSpec(repoId, 'RETRY-1', 'Plan recovery', { workflowKind: 'bugfix' });
+    await app.recordAiOutput(repoId, 'RETRY-1', 'spec', 'Approved requirements', undefined, ids.map(id => ({ id, given: 'input', when: 'called', then: 'expected result' })));
+    await app.approve(repoId, 'RETRY-1', 'spec', 1);
+    await app.advance(repoId, 'RETRY-1', 'spec');
+    await expect(app.setDevelopSubtasks(repoId, 'RETRY-1', [{ id: 'BAD', description: 'Bad reference', requirementRef: 'AC-1, AC-2' }])).rejects.toThrow('Unknown acceptance criterion: AC-1, AC-2');
+    await app.updateAutomation(repoId, 'RETRY-1', spec => {
+      spec.automation = { enabled: true, status: 'failed', attempt: 2, threadId: 'thread-one', error: 'Unknown acceptance criterion: AC-1, AC-2' };
+    });
+    await service.start();
+    await app.resumeExecution(repoId, 'RETRY-1');
+    await app.configureAutomation(repoId, 'RETRY-1', true);
+    await expect.poll(async () => (await app.getSpec(repoId, 'RETRY-1'))?.automation, { timeout: 5000 }).toMatchObject({ status: 'waiting_review' });
+    const result = (await app.getSpec(repoId, 'RETRY-1'))!;
+    expect(result.automation?.error).toBeUndefined();
+    expect(result.automation?.threadId).toBe('thread-one');
+    expect(result.stages[3].subtasks?.map(task => task.requirementRef)).toEqual(ids.length ? ids : ['']);
+    expect(result.stages[3].gate.status).toBe('pending_review');
+    expect(result.stages[0].gate.status).toBe('approved');
+    expect(result.currentStageId).toBe('develop');
+  } finally {
+    await service.stop();
+    vi.unstubAllEnvs();
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
