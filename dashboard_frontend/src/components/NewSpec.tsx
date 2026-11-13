@@ -1,6 +1,6 @@
 import { configurationLabel } from '../lib/agent-profiles';
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { type AgentSettings, type CreateSpecOptions } from '../types';
 import { Dialog } from './Dialog';
 
@@ -34,33 +34,42 @@ export function NewSpec({ activeRepo, onClose, onCreate }: {
     return () => { alive = false; requestVersion.current++; };
   }, []);
   useEffect(() => { if (settings) setProfileId(settings.defaultProfileId ?? ''); }, [settings]);
-  async function importJira(key: string) {
+  async function importJira(key: string, authenticateIfNeeded = false) {
     const version = ++requestVersion.current;
+    let authenticating = false;
     setJiraLoading(true); setJiraError('');
     try {
-      const issue = await api.jiraIssue(key);
+      let issue;
+      try { issue = await api.jiraIssue(key); }
+      catch (error) {
+        if (version !== requestVersion.current) return;
+        if (!authenticateIfNeeded || !jiraAuthAvailable || !(error instanceof ApiError) || error.code !== 'SAP_AUTH_REQUIRED') throw error;
+        authenticating = true; setJiraAuthenticating(true);
+        await api.jiraAuthenticate();
+        if (version !== requestVersion.current) return;
+        authenticating = false; setJiraAuthenticating(false);
+        // Retry the original ticket once. Continued auth failures remain visible.
+        issue = await api.jiraIssue(key);
+      }
       if (version !== requestVersion.current) return;
       const text = issue.summary + (issue.description ? String.fromCharCode(10, 10) + issue.description : '');
       importedText.current = text; descriptionRef.current = text;
       setDescription(text); setImportedKey(issue.key);
-    } catch (error) { if (version === requestVersion.current) setJiraError((error as Error).message); }
-    finally { if (version === requestVersion.current) setJiraLoading(false); }
-  }
-  async function signInJira() {
-    const version = ++requestVersion.current;
-    setJiraLoading(false); setJiraAuthenticating(true); setJiraError('');
-    try {
-      await api.jiraAuthenticate();
-      if (version !== requestVersion.current) return;
-      if (validJiraKey && !descriptionRef.current.trim()) await importJira(jiraKey);
-    } catch (error) { if (version === requestVersion.current) setJiraError((error as Error).message); }
-    finally { setJiraAuthenticating(false); }
+    } catch (error) {
+      if (version === requestVersion.current) setJiraError(error instanceof ApiError && error.code === 'SAP_AUTH_REQUIRED'
+        ? 'Jira sign-in is required. Click Load / Replace from Jira to authenticate and retry.'
+        : (error as Error).message);
+    } finally {
+      if (authenticating) setJiraAuthenticating(false);
+      if (version === requestVersion.current) setJiraLoading(false);
+    }
   }
   useEffect(() => {
     if (!jiraConfigured || jiraAuthenticating || !validJiraKey || descriptionRef.current.trim()) return;
-    const timer = setTimeout(() => { if (!descriptionRef.current.trim()) void importJira(jiraKey); }, 600);
+    const version = requestVersion.current;
+    const timer = setTimeout(() => { if (version === requestVersion.current && !descriptionRef.current.trim()) void importJira(jiraKey); }, 600);
     return () => clearTimeout(timer);
-  }, [jiraKey, jiraConfigured, jiraAuthenticating]);
+  }, [jiraKey, jiraConfigured]);
   function changeTicket(value: string) {
     requestVersion.current++; setJiraLoading(false); setJiraError(''); setImportedKey('');
     if (descriptionRef.current === importedText.current) { setDescription(''); descriptionRef.current = ''; }
@@ -90,8 +99,7 @@ export function NewSpec({ activeRepo, onClose, onCreate }: {
           <label className="field">Ticket ID<input required data-autofocus value={ticketId} onChange={(e) => changeTicket(e.target.value)} placeholder="TICKET-123" /></label>
           <label className="field">Workflow type<select aria-label="Workflow type" value={workflowKind} onChange={(e) => setWorkflowKind(e.target.value as typeof workflowKind)}><option value="standard">Standard feature</option><option value="bugfix">Bug fix</option><option value="documentation">Documentation only</option></select></label>
           {jiraConfigured && <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
-            <button type="button" disabled={busy || jiraLoading || jiraAuthenticating || !validJiraKey} onClick={() => void importJira(jiraKey)} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs disabled:opacity-50">{description.trim() ? 'Replace from Jira' : 'Load from Jira'}</button>
-            {jiraAuthAvailable && <button type="button" disabled={busy || jiraLoading || jiraAuthenticating} onClick={() => void signInJira()} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs disabled:opacity-50">{jiraAuthenticating ? 'Signing in…' : 'Sign in to Jira'}</button>}
+            <button type="button" disabled={busy || jiraLoading || jiraAuthenticating || !validJiraKey} onClick={() => void importJira(jiraKey, true)} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs disabled:opacity-50">{jiraAuthenticating ? 'Signing in…' : description.trim() ? 'Replace from Jira' : 'Load from Jira'}</button>
             {jiraAuthenticating && <span role="status" className="text-xs text-slate-500">Complete SAP SSO in the browser on the Dashboard host. This may take a few minutes.</span>}
             {jiraAuthenticating ? null : jiraLoading ? <span role="status" className="text-xs text-slate-500">Loading Jira ticket…</span> : importedKey ? <span role="status" className="text-xs text-emerald-700">Imported {importedKey} from Jira. You can edit the requirements below.</span> : <span className="text-xs text-slate-500">An empty description is filled automatically from the Ticket ID.</span>}
           </div>}

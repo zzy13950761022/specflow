@@ -807,7 +807,7 @@ test('Jira authentication failure leaves Create Spec usable with manual requirem
   await expect(dialog.getByRole('button', { name: 'Create & Start', exact: true })).toBeEnabled();
 });
 
-test('SAP SSO is explicit and retries the ticket after authentication without creating a spec', async ({ page }) => {
+for (const replace of [false, true]) test((replace ? 'Replace' : 'Load') + ' from Jira authenticates on demand and retries without creating a spec', async ({ page }) => {
   const state = await mockDashboard(page);
   let signedIn = false;
   let loginRequests = 0;
@@ -829,9 +829,11 @@ test('SAP SSO is explicit and retries the ticket after authentication without cr
     await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Create Spec' });
     await dialog.getByLabel('Ticket ID', { exact: true }).fill('SSO-1');
-    await expect(dialog.getByRole('alert')).toContainText('Sign in to Jira with SAP SSO');
+    await expect(dialog.getByRole('alert')).toContainText('Click Load / Replace from Jira');
     expect(loginRequests).toBe(0);
-    await dialog.getByRole('button', { name: 'Sign in to Jira', exact: true }).click();
+    await expect(dialog.getByRole('button', { name: 'Sign in to Jira', exact: true })).toHaveCount(0);
+    if (replace) await dialog.getByLabel('Description', { exact: true }).fill('Old requirements');
+    await dialog.getByRole('button', { name: replace ? 'Replace from Jira' : 'Load from Jira', exact: true }).click();
     await expect(dialog.getByText(/Complete SAP SSO in the browser/)).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Signing in…', exact: true })).toBeDisabled();
     release();
@@ -839,4 +841,66 @@ test('SAP SSO is explicit and retries the ticket after authentication without cr
     expect(loginRequests).toBe(1);
     expect(state.creations).toHaveLength(0);
   } finally { release(); }
+});
+
+for (const change of ['description', 'ticket', 'close']) test('Jira authentication does not import stale data after ' + change + ' changes', async ({ page }) => {
+  const state = await mockDashboard(page);
+  let signedIn = false;
+  let readsAfterLogin = 0;
+  await page.route('**/api/integrations/jira', route => route.fulfill({ json: { configured: true, authenticationAvailable: true } }));
+  await page.route('**/api/integrations/jira/issue', route => {
+    if (!signedIn) return route.fulfill({ status: 502, json: { error: 'Needs SSO', code: 'SAP_AUTH_REQUIRED' } });
+    readsAfterLogin++;
+    return route.fulfill({ json: { key: route.request().postDataJSON().ticketId, summary: 'Jira requirements', description: 'Criteria' } });
+  });
+  let release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/integrations/jira/authenticate', async route => {
+    await hold; signedIn = true;
+    await route.fulfill({ json: { authenticated: true } });
+  });
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Create Spec' });
+    await dialog.getByLabel('Ticket ID', { exact: true }).fill('SSO-1');
+    await expect(dialog.getByRole('alert')).toContainText('Click Load / Replace from Jira');
+    await dialog.getByRole('button', { name: 'Load from Jira', exact: true }).click();
+    await expect(dialog.getByText(/Complete SAP SSO in the browser/)).toBeVisible();
+    if (change === 'description') await dialog.getByLabel('Description', { exact: true }).fill('Keep my manual requirements');
+    if (change === 'ticket') await dialog.getByLabel('Ticket ID', { exact: true }).fill('NEW-2');
+    if (change === 'close') await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    const completed = page.waitForResponse(response => response.url().endsWith('/jira/authenticate'));
+    release(); await completed;
+    if (change === 'close') {
+      await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
+      await expect(dialog.getByLabel('Description', { exact: true })).toHaveValue('');
+    } else {
+      await expect(dialog.getByText(/Complete SAP SSO in the browser/)).toHaveCount(0);
+      await expect(dialog.getByLabel('Description', { exact: true })).toHaveValue(change === 'description' ? 'Keep my manual requirements' : '');
+    }
+    expect(readsAfterLogin).toBe(0);
+    expect(state.creations).toHaveLength(0);
+  } finally { release(); }
+});
+
+test('Jira retries authentication once and leaves requirements editable when login remains invalid', async ({ page }) => {
+  await mockDashboard(page);
+  let logins = 0;
+  let reads = 0;
+  await page.route('**/api/integrations/jira', route => route.fulfill({ json: { configured: true, authenticationAvailable: true } }));
+  await page.route('**/api/integrations/jira/issue', route => { reads++; return route.fulfill({ status: 502, json: { error: 'Needs SSO', code: 'SAP_AUTH_REQUIRED' } }); });
+  await page.route('**/api/integrations/jira/authenticate', route => { logins++; return route.fulfill({ json: { authenticated: true } }); });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create Spec' });
+  await dialog.getByLabel('Ticket ID', { exact: true }).fill('SSO-1');
+  await expect(dialog.getByRole('alert')).toContainText('Click Load / Replace from Jira');
+  await dialog.getByRole('button', { name: 'Load from Jira', exact: true }).click();
+  await expect.poll(() => reads).toBe(3); // initial automatic read, clicked read, one retry
+  await expect(dialog.getByRole('alert')).toContainText('Click Load / Replace from Jira');
+  await expect(dialog.getByRole('button', { name: 'Load from Jira', exact: true })).toBeEnabled();
+  expect(logins).toBe(1);
+  await dialog.getByLabel('Description', { exact: true }).fill('Manual requirements');
+  await expect(dialog.getByRole('button', { name: 'Create & Start', exact: true })).toBeEnabled();
 });

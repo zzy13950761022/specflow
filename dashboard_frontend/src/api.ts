@@ -2,10 +2,14 @@ import type { AgentDetection } from './types';
 import type { Artifact, RepoEntry, RequirementsData, SpecFile, StageId, TemplateSummary, Subtask } from './types';
 import type { AgentProfile, AgentSettings, CreateSpecOptions, HandoffContext } from './types';
 
+export class ApiError extends Error {
+  constructor(message: string, readonly code?: string) { super(message); }
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error ?? `HTTP ${res.status}`);
+    throw new ApiError(body.error ?? ('HTTP ' + res.status), typeof body.code === 'string' ? body.code : undefined);
   }
   return res.json() as Promise<T>;
 }

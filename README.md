@@ -405,13 +405,19 @@ Git, specs and browser responses. If encryption is omitted, both keys must be
 omitted; cookies are then stored in plain text. AUTH_COOKIE_DIR and auth.storePath
 must match. entryUrl must refer to the configured Jira domain.
 
-In Create Spec, **Sign in to Jira** calls SAP Auth and opens Chrome on the
-Dashboard host. Complete SAP SSO, certificate selection or MFA there. Login may
-take several minutes. Concurrent sign-in requests share one login operation.
-After login, an empty Description for the unchanged Ticket ID is loaded again;
-manual edits are preserved. Expired login shows a sign-in message; Ticket lookup
-never launches a login browser automatically. After entering requirements
-manually, use **Replace from Jira** if you want to replace them after signing in.
+In Create Spec, **Load from Jira** (or **Replace from Jira** for existing text)
+first reads the ticket. If SAP SSO is missing or expired, the same action opens
+Chrome on the Dashboard host for authentication, then retries the original ticket
+once. Complete SSO, certificate selection or MFA there; login may take several
+minutes. There is no separate sign-in button. Concurrent sign-in requests share one
+login operation. Automatic lookup while typing never opens the login browser;
+if sign-in is required, click Load / Replace from Jira.
+
+Changing the Ticket ID, editing Description or closing the dialog during login
+cancels that import; late login results cannot overwrite requirements. Explicit
+Replace from Jira replaces existing text only if it remains unchanged while the
+request is pending. Failed authentication leaves requirements editable and offers
+the same load action for retry, without repeatedly reopening the browser.
 
 SAP Jira's get_issue(issue_key, fields) formatted response is supported, alongside
 JSON responses with key/summary/description or key/fields.summary/fields.description
