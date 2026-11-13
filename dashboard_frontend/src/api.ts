@@ -22,7 +22,8 @@ async function reviewFetch(url: string, options: RequestInit = {}): Promise<Resp
 }
 
 export const api = {
-  jiraStatus: () => reviewFetch('/api/integrations/jira').then(r => json<{ configured: boolean }>(r)),
+  jiraStatus: () => reviewFetch('/api/integrations/jira').then(r => json<{ configured: boolean; authenticationAvailable?: boolean }>(r)),
+  jiraAuthenticate: () => reviewFetch('/api/integrations/jira/authenticate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).then(r => json<{ authenticated: boolean }>(r)),
   jiraIssue: (ticketId: string) => reviewFetch('/api/integrations/jira/issue', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ticketId }) }).then(r => json<{ key: string; summary: string; description: string }>(r)),
   agentSettings: () => reviewFetch('/api/agents/settings').then((r) => json<AgentSettings>(r)),
   saveAgentSettings: (settings: AgentSettings) => reviewFetch('/api/agents/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(settings) }).then((r) => json<AgentSettings>(r)),

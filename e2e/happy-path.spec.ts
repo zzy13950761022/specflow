@@ -806,3 +806,37 @@ test('Jira authentication failure leaves Create Spec usable with manual requirem
   await dialog.getByLabel('Description', { exact: true }).fill('Manual requirements');
   await expect(dialog.getByRole('button', { name: 'Create & Start', exact: true })).toBeEnabled();
 });
+
+test('SAP SSO is explicit and retries the ticket after authentication without creating a spec', async ({ page }) => {
+  const state = await mockDashboard(page);
+  let signedIn = false;
+  let loginRequests = 0;
+  await page.route('**/api/integrations/jira', route => route.fulfill({ json: { configured: true, authenticationAvailable: true } }));
+  await page.route('**/api/integrations/jira/issue', route => signedIn
+    ? route.fulfill({ json: { key: 'SSO-1', summary: 'SAP Jira summary', description: 'Acceptance criteria' } })
+    : route.fulfill({ status: 502, json: { error: 'Sign in to Jira with SAP SSO, then retry the lookup.', code: 'SAP_AUTH_REQUIRED' } }));
+  let release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/integrations/jira/authenticate', async route => {
+    expect(route.request().postDataJSON()).toEqual({});
+    expect(route.request().headers()['x-specflow-review-session']).toBe('ui-review-token');
+    loginRequests++;
+    await hold; signedIn = true;
+    await route.fulfill({ json: { authenticated: true } });
+  });
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Create Spec' });
+    await dialog.getByLabel('Ticket ID', { exact: true }).fill('SSO-1');
+    await expect(dialog.getByRole('alert')).toContainText('Sign in to Jira with SAP SSO');
+    expect(loginRequests).toBe(0);
+    await dialog.getByRole('button', { name: 'Sign in to Jira', exact: true }).click();
+    await expect(dialog.getByText(/Complete SAP SSO in the browser/)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Signing in…', exact: true })).toBeDisabled();
+    release();
+    await expect(dialog.getByLabel('Description', { exact: true })).toHaveValue('SAP Jira summary\n\nAcceptance criteria');
+    expect(loginRequests).toBe(1);
+    expect(state.creations).toHaveLength(0);
+  } finally { release(); }
+});

@@ -362,27 +362,66 @@ manual edits are preserved. **Load from Jira** retries a lookup, and **Replace f
 Jira** explicitly replaces entered requirements. Reading a ticket does not start
 an agent or modify Jira. Errors leave manual creation available.
 
-Configure the Dashboard host with a private JSON file named jira-mcp.json in the
-platform home (AI_PILOT_HOME, or ~/.specflow). SPECFLOW_JIRA_MCP_CONFIG can select
-another file; SPECFLOW_HOME is also supported for the team distribution. Example:
+The Dashboard uses [SAP Auth MCP](https://github.tools.sap/sfsfmcp/sap-auth-mcp)
+and [SAP Jira MCP](https://github.tools.sap/sfsfmcp/sap-jira-mcp). Install both on
+the Dashboard host with Node 20 or newer: clone each repository, run npm install
+and npm run build, and use its absolute dist/index.js path below. SAP Auth uses
+local Chrome for SAP SSO; an API token is not required.
+
+Configure a private jira-mcp.json in the platform home (SPECFLOW_HOME,
+AI_PILOT_HOME, or ~/.specflow). SPECFLOW_JIRA_MCP_CONFIG can select another file:
 
 ~~~json
 {
   "command": "/absolute/path/to/node",
-  "args": ["--import", "tsx/esm", "/absolute/team/mcp/jira-service/src/index.ts"],
-  "cwd": "/absolute/team/mcp/jira-service",
-  "env": { "JIRA_ENV_FILE": "/absolute/private/jira.env" }
+  "args": ["/absolute/sap-jira-mcp/dist/index.js"],
+  "cwd": "/absolute/sap-jira-mcp",
+  "env": {
+    "JIRA_DOMAIN": "jira.tools.sap",
+    "AUTH_COOKIE_DIR": "/absolute/private/cookies/sap-jira",
+    "DECRYPT_KEY": "<same-private-secret-as-ENCRYPT_KEY>",
+    "JIRA_API_TOKEN": "",
+    "VERBOSE": "false"
+  },
+  "auth": {
+    "command": "/absolute/path/to/node",
+    "args": ["/absolute/sap-auth-mcp/dist/index.js"],
+    "cwd": "/absolute/sap-auth-mcp",
+    "env": {
+      "BROWSER_PATH": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "VISIBLE_MODE": "true",
+      "ENCRYPT_KEY": "<private-random-secret-at-least-16-characters>",
+      "VERBOSE": "false"
+    },
+    "entryUrl": "https://jira.tools.sap/",
+    "storePath": "/absolute/private/cookies/sap-jira"
+  }
 }
 ~~~
 
-The service must provide get_issue(issueKey, fields) and return a JSON text result
-with key, summary and a plain-text description. Install the service's dependencies
-first. Keep JIRA_BASE_URL and JIRA_PAT in its private environment file; never put
-a PAT in the browser, a spec, or a committed configuration file. Use restrictive
-permissions (chmod 600) for configuration/credential files. Jira access stays in
-the Dashboard host and works with every Agent profile. No Jira tools or credentials
-are added to managed Agent sessions. Each lookup has bounded MCP requests and
-closes its process afterward. HTTP 401/403, 404 and 429 produce actionable messages.
+Use a dedicated Jira cookie directory (chmod 700) and private configuration
+(chmod 600). ENCRYPT_KEY and DECRYPT_KEY must match. Keep them and cookies out of
+Git, specs and browser responses. If encryption is omitted, both keys must be
+omitted; cookies are then stored in plain text. AUTH_COOKIE_DIR and auth.storePath
+must match. entryUrl must refer to the configured Jira domain.
+
+In Create Spec, **Sign in to Jira** calls SAP Auth and opens Chrome on the
+Dashboard host. Complete SAP SSO, certificate selection or MFA there. Login may
+take several minutes. Concurrent sign-in requests share one login operation.
+After login, an empty Description for the unchanged Ticket ID is loaded again;
+manual edits are preserved. Expired login shows a sign-in message; Ticket lookup
+never launches a login browser automatically. After entering requirements
+manually, use **Replace from Jira** if you want to replace them after signing in.
+
+SAP Jira's get_issue(issue_key, fields) formatted response is supported, alongside
+JSON responses with key/summary/description or key/fields.summary/fields.description
+and legacy issueKey arguments. Only summary and description are imported; creator,
+assignee and comments are excluded. Unsupported formats fail without changing the
+description. Requests are bounded (20 seconds for lookup, seven minutes for SSO)
+and MCP processes close afterward. Jira tools and credentials are not added to
+managed Agent sessions; only get_issue and sap_authenticate are called by the
+Dashboard. Authentication uses host-configured URLs and paths, never those returned
+by a Jira error. Reading Jira does not create a spec or approve workflow stages.
 
 IDE handoff remains available at every stage, typically when development starts.
 Manual ticket creation through MCP remains supported. The board searches ticket
