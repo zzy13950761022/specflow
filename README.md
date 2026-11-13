@@ -355,9 +355,35 @@ risk and starts the selected Agent, with automatic check approval disabled.
 Click **Create & Start**; launch failures remain on the persisted ticket with a
 Retry action. A description and saved execution configuration are required.
 
-Jira MCP is not connected yet: ticket IDs alone do not retrieve Jira details.
-Enter the requirements and acceptance criteria in Description for now. Automatic Jira import is a follow-up integration once a Jira MCP
-connection is available.
+When Jira MCP is configured, a valid Ticket ID automatically loads its summary and
+text description while Description is empty. Check and edit the imported text
+before Create & Start. Changing tickets discards only untouched imported text;
+manual edits are preserved. **Load from Jira** retries a lookup, and **Replace from
+Jira** explicitly replaces entered requirements. Reading a ticket does not start
+an agent or modify Jira. Errors leave manual creation available.
+
+Configure the Dashboard host with a private JSON file named jira-mcp.json in the
+platform home (AI_PILOT_HOME, or ~/.specflow). SPECFLOW_JIRA_MCP_CONFIG can select
+another file; SPECFLOW_HOME is also supported for the team distribution. Example:
+
+~~~json
+{
+  "command": "/absolute/path/to/node",
+  "args": ["--import", "tsx/esm", "/absolute/team/mcp/jira-service/src/index.ts"],
+  "cwd": "/absolute/team/mcp/jira-service",
+  "env": { "JIRA_ENV_FILE": "/absolute/private/jira.env" }
+}
+~~~
+
+The service must provide get_issue(issueKey, fields) and return a JSON text result
+with key, summary and a plain-text description. Install the service's dependencies
+first. Keep JIRA_BASE_URL and JIRA_PAT in its private environment file; never put
+a PAT in the browser, a spec, or a committed configuration file. Use restrictive
+permissions (chmod 600) for configuration/credential files. Jira access stays in
+the Dashboard host and works with every Agent profile. No Jira tools or credentials
+are added to managed Agent sessions. Each lookup has bounded MCP requests and
+closes its process afterward. HTTP 401/403, 404 and 429 produce actionable messages.
+
 IDE handoff remains available at every stage, typically when development starts.
 Manual ticket creation through MCP remains supported. The board searches ticket
 IDs/titles, filters state/stage/workflow and preserves filters in the URL.

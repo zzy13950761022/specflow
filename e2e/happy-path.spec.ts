@@ -253,6 +253,7 @@ async function mockDashboard(page: Page) {
     if (path.startsWith('/api/agents/') || path.endsWith('/handoff') || request.method() !== 'GET') expect(request.headers()['x-specflow-review-session']).toBe('ui-review-token');
     if (path === '/api/repos') return reply([{ id: 'ui-repo', name: 'UI repository', path: '/tmp/ui-repo', addedAt: '2026-01-01' }]);
     if (path === '/api/automation') return reply({ available: true });
+    if (path === '/api/integrations/jira') return reply({ configured: false });
     if (path === '/api/agents/settings') {
       if (request.method() === 'PUT') {
         state.saved = body;
@@ -750,4 +751,58 @@ test('development workspace keeps reports readable, ignores late reads and appro
     await page.setViewportSize({ width: 600, height: 800 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(600);
   } finally { releaseA(); await client.close(); }
+});
+
+test('Create Spec imports Jira without starting an agent, ignores stale reads and preserves manual edits', async ({ page }) => {
+  const state = await mockDashboard(page);
+  await page.route('**/api/integrations/jira', route => route.fulfill({ json: { configured: true } }));
+  let release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  let releaseRefresh!: () => void;
+  const holdRefresh = new Promise<void>(resolve => { releaseRefresh = resolve; });
+  let fastRequests = 0;
+  await page.route('**/api/integrations/jira/issue', async route => {
+    expect(route.request().headers()['x-specflow-review-session']).toBe('ui-review-token');
+    const { ticketId } = route.request().postDataJSON();
+    if (ticketId === 'SLOW-1') await hold;
+    if (ticketId === 'FAST-2' && ++fastRequests > 1) await holdRefresh;
+    await route.fulfill({ json: { key: ticketId, summary: 'Jira ' + ticketId, description: 'Given an order\nThen calculate shipping' } });
+  });
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Create Spec' });
+    await dialog.getByLabel('Ticket ID', { exact: true }).fill('SLOW-1');
+    await expect(dialog.getByText('Loading Jira ticket…')).toBeVisible();
+    await dialog.getByLabel('Ticket ID', { exact: true }).fill('FAST-2');
+    await expect(dialog.getByLabel('Description', { exact: true })).toHaveValue('Jira FAST-2\n\nGiven an order\nThen calculate shipping');
+    const oldResponse = page.waitForResponse(response => response.url().endsWith('/jira/issue') && response.request().postDataJSON().ticketId === 'SLOW-1');
+    release();
+    await oldResponse;
+    await expect(dialog.getByText('Imported FAST-2 from Jira. You can edit the requirements below.')).toBeVisible();
+    expect(state.creations).toHaveLength(0);
+    await dialog.getByRole('button', { name: 'Replace from Jira', exact: true }).click();
+    await expect(dialog.getByText('Loading Jira ticket…')).toBeVisible();
+    await dialog.getByLabel('Description', { exact: true }).fill('My revised requirements');
+    const refreshed = page.waitForResponse(response => response.url().endsWith('/jira/issue') && response.request().postDataJSON().ticketId === 'FAST-2');
+    releaseRefresh();
+    await refreshed;
+    await expect(dialog.getByLabel('Description', { exact: true })).toHaveValue('My revised requirements');
+    await dialog.getByRole('button', { name: 'Create & Start', exact: true }).click();
+    await expect.poll(() => state.creations.length).toBe(1);
+    expect(state.creations[0]).toMatchObject({ ticketId: 'FAST-2', title: 'My revised requirements', description: 'My revised requirements', autoRun: true });
+  } finally { release(); releaseRefresh(); }
+});
+
+test('Jira authentication failure leaves Create Spec usable with manual requirements', async ({ page }) => {
+  await mockDashboard(page);
+  await page.route('**/api/integrations/jira', route => route.fulfill({ json: { configured: true } }));
+  await page.route('**/api/integrations/jira/issue', route => route.fulfill({ status: 502, json: { error: 'Jira authentication failed (401). Update the Jira MCP credentials and retry.' } }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Create Spec', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create Spec' });
+  await dialog.getByLabel('Ticket ID', { exact: true }).fill('AUTH-1');
+  await expect(dialog.getByText(/Jira authentication failed/)).toBeVisible();
+  await dialog.getByLabel('Description', { exact: true }).fill('Manual requirements');
+  await expect(dialog.getByRole('button', { name: 'Create & Start', exact: true })).toBeEnabled();
 });

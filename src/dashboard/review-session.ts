@@ -10,7 +10,7 @@ export function registerReviewSession(server: FastifyInstance): void {
   });
   server.addHook('preHandler', async (req, reply) => {
     const path = req.routeOptions.url ?? req.url.split('?')[0];
-    const configuration = path.startsWith('/api/agents/') || path.endsWith('/handoff');
+    const configuration = path.startsWith('/api/agents/') || path.startsWith('/api/integrations/') || path.endsWith('/handoff');
     if ((req.method === 'GET' || req.method === 'HEAD') && !configuration) return;
     const decision = /[/](approve|reject|needs-revision)$/.test(path) || path.endsWith('/develop/review') || path.endsWith('/develop/review-all') || path.includes('/automation');
     const managedCreation = path.endsWith('/specs') && (req.body as { autoRun?: boolean } | null)?.autoRun;

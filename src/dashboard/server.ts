@@ -13,6 +13,7 @@ import { pickFolder } from './folder-picker.js';
 import type { WebSocket } from 'ws';
 import { registerReviewSession } from './review-session.js';
 import { registerAgentRoutes } from './agent-routes.js';
+import { registerJiraRoutes } from './jira-routes.js';
 
 /**
  * The dashboard HTTP+WS server. The human lives here: they Approve/Reject
@@ -33,6 +34,7 @@ export async function buildDashboard(app: AppCore, options: DashboardOptions = {
   const runnerEnabled = options.runnerEnabled ?? false;
   registerReviewSession(fastify);
   registerAgentRoutes(fastify, app);
+  registerJiraRoutes(fastify);
   registerWorkflowRoutes(fastify, app, runnerEnabled);
   fastify.get('/api/automation', async () => ({ available: runnerEnabled }));
   await fastify.register(fastifyWebsocket);
